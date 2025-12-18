@@ -1,211 +1,211 @@
 <dashboard version="1.1" theme="dark">
-  <label>Docker Swarm &amp; Containers</label>
-  <description>Container status, resource usage, Swarm health</description>
-  
-  <row>
-    <panel>
-      <title>🐳 Running Containers</title>
-      <single>
-        <search>
-          <query>
+    <label>Docker Swarm &amp; Containers</label>
+    <description>Container status, resource usage, Swarm health</description>
+
+    <row>
+        <panel>
+            <title>🐳 Running Containers</title>
+            <single>
+                <search>
+                    <query>
 index=docker sourcetype="docker:container:status" earliest=-5m
 | dedup names
 | stats count
-          </query>
-          <earliest>-5m</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="colorMode">block</option>
-        <option name="rangeColors">["0xdc4e41","0x53a051","0x53a051"]</option>
-        <option name="rangeValues">[5,100]</option>
-        <option name="useColors">1</option>
-      </single>
-    </panel>
-    <panel>
-      <title>📊 Swarm Nodes</title>
-      <single>
-        <search>
-          <query>
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0xdc4e41","0x53a051","0x53a051"]</option>
+                <option name="rangeValues">[5,100]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>📊 Swarm Nodes</title>
+            <single>
+                <search>
+                    <query>
 index=docker sourcetype="docker:swarm:node" earliest=-5m
 | dedup hostname
 | stats count
-          </query>
-          <earliest>-5m</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="colorMode">block</option>
-        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
-        <option name="rangeValues">[3,5]</option>
-        <option name="useColors">1</option>
-      </single>
-    </panel>
-    <panel>
-      <title>🔧 Swarm Services</title>
-      <single>
-        <search>
-          <query>
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+                <option name="rangeValues">[3,5]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>🔧 Swarm Services</title>
+            <single>
+                <search>
+                    <query>
 index=docker sourcetype="docker:swarm:service" earliest=-5m
 | dedup name
 | stats count
-          </query>
-          <earliest>-5m</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-      </single>
-    </panel>
-    <panel>
-      <title>📈 Docker Events (Last Hour)</title>
-      <single>
-        <search>
-          <query>index=docker earliest=-1h | stats count</query>
-          <earliest>-1h</earliest>
-          <latest>now</latest>
-          <refresh>60s</refresh>
-        </search>
-      </single>
-    </panel>
-  </row>
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+            </single>
+        </panel>
+        <panel>
+            <title>📈 Docker Events (Last Hour)</title>
+            <single>
+                <search>
+                    <query>index=docker earliest=-1h | stats count</query>
+                    <earliest>-1h</earliest>
+                    <latest>now</latest>
+                    <refresh>60s</refresh>
+                </search>
+            </single>
+        </panel>
+    </row>
 
-  <row>
-    <panel>
-      <title>Swarm Node Status</title>
-      <table>
-        <search>
-          <query>
+    <row>
+        <panel>
+            <title>Swarm Node Status</title>
+            <table>
+                <search>
+                    <query>
 index=docker sourcetype="docker:swarm:node" earliest=-5m
 | dedup hostname
 | table hostname status availability manager_status
 | rename hostname as "Node" status as "Status" availability as "Availability" manager_status as "Role"
-          </query>
-          <earliest>-5m</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
-    <panel>
-      <title>Swarm Services</title>
-      <table>
-        <search>
-          <query>
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+        <panel>
+            <title>Swarm Services</title>
+            <table>
+                <search>
+                    <query>
 index=docker sourcetype="docker:swarm:service" earliest=-5m
 | dedup name
 | table name mode replicas image
 | rename name as "Service" mode as "Mode" replicas as "Replicas" image as "Image"
-          </query>
-          <earliest>-5m</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
-  </row>
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+    </row>
 
-  <row>
-    <panel>
-      <title>Container CPU Usage (%)</title>
-      <chart>
-        <search>
-          <query>
+    <row>
+        <panel>
+            <title>Container CPU Usage (%)</title>
+            <chart>
+                <search>
+                    <query>
 index=docker sourcetype="docker:stats" earliest=-1h
 | rex field=cpu "(?&lt;cpu_pct&gt;[\d.]+)%"
 | timechart span=5m avg(cpu_pct) by name limit=10
-          </query>
-          <earliest>-1h</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="charting.chart">line</option>
-        <option name="charting.legend.placement">right</option>
-        <option name="charting.axisTitleY.text">CPU %</option>
-      </chart>
-    </panel>
-    <panel>
-      <title>Container Memory Usage (%)</title>
-      <chart>
-        <search>
-          <query>
+                    </query>
+                    <earliest>-1h</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.legend.placement">right</option>
+                <option name="charting.axisTitleY.text">CPU %</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>Container Memory Usage (%)</title>
+            <chart>
+                <search>
+                    <query>
 index=docker sourcetype="docker:stats" earliest=-1h
 | rex field=mem_perc "(?&lt;mem_pct&gt;[\d.]+)%"
 | timechart span=5m avg(mem_pct) by name limit=10
-          </query>
-          <earliest>-1h</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="charting.chart">area</option>
-        <option name="charting.chart.stackMode">stacked</option>
-        <option name="charting.legend.placement">right</option>
-        <option name="charting.axisTitleY.text">Memory %</option>
-      </chart>
-    </panel>
-  </row>
+                    </query>
+                    <earliest>-1h</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.legend.placement">right</option>
+                <option name="charting.axisTitleY.text">Memory %</option>
+            </chart>
+        </panel>
+    </row>
 
-  <row>
-    <panel>
-      <title>Container Resource Details</title>
-      <table>
-        <search>
-          <query>
+    <row>
+        <panel>
+            <title>Container Resource Details</title>
+            <table>
+                <search>
+                    <query>
 index=docker sourcetype="docker:stats" earliest=-5m
 | dedup name
 | table name cpu mem_usage mem_perc net_io block_io
 | rename name as "Container" cpu as "CPU" mem_usage as "Memory" mem_perc as "Mem %" net_io as "Network I/O" block_io as "Block I/O"
-          </query>
-          <earliest>-5m</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="drilldown">none</option>
-        <option name="count">20</option>
-      </table>
-    </panel>
-  </row>
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">20</option>
+            </table>
+        </panel>
+    </row>
 
-  <row>
-    <panel>
-      <title>Running Containers List</title>
-      <table>
-        <search>
-          <query>
+    <row>
+        <panel>
+            <title>Running Containers List</title>
+            <table>
+                <search>
+                    <query>
 index=docker sourcetype="docker:container:status" earliest=-5m
 | dedup names
 | table names image status ports
 | rename names as "Container" image as "Image" status as "Status" ports as "Ports"
-          </query>
-          <earliest>-5m</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="drilldown">none</option>
-        <option name="count">25</option>
-      </table>
-    </panel>
-  </row>
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                    <refresh>30s</refresh>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">25</option>
+            </table>
+        </panel>
+    </row>
 
-  <row>
-    <panel>
-      <title>Docker Events Over Time</title>
-      <chart>
-        <search>
-          <query>
+    <row>
+        <panel>
+            <title>Docker Events Over Time</title>
+            <chart>
+                <search>
+                    <query>
 index=docker earliest=-24h
 | timechart span=1h count by sourcetype
-          </query>
-          <earliest>-24h</earliest>
-          <latest>now</latest>
-          <refresh>60s</refresh>
-        </search>
-        <option name="charting.chart">column</option>
-        <option name="charting.chart.stackMode">stacked</option>
-        <option name="charting.legend.placement">right</option>
-      </chart>
-    </panel>
-  </row>
+                    </query>
+                    <earliest>-24h</earliest>
+                    <latest>now</latest>
+                    <refresh>60s</refresh>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.legend.placement">right</option>
+            </chart>
+        </panel>
+    </row>
 </dashboard>
 
