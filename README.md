@@ -106,20 +106,20 @@ splunk-homelab/
 
 ## 🔐 Access Credentials
 
-| Service | URL | Username | Password |
-|---------|-----|----------|----------|
-| Splunk Web UI | https://INDEXER_IP:8000 | admin | SplunkAdmin@2025 |
-| Management API | https://INDEXER_IP:8089 | admin | SplunkAdmin@2025 |
-| HEC Token | - | - | a1b2c3d4-e5f6-7890-abcd-ef1234567890 |
+| Service        | URL                     | Username | Password                             |
+| -------------- | ----------------------- | -------- | ------------------------------------ |
+| Splunk Web UI  | https://INDEXER_IP:8000 | admin    | SplunkAdmin@2025                     |
+| Management API | https://INDEXER_IP:8089 | admin    | SplunkAdmin@2025                     |
+| HEC Token      | -                       | -        | a1b2c3d4-e5f6-7890-abcd-ef1234567890 |
 
 ## 📊 Indexes
 
-| Index | Purpose | Data Sources |
-|-------|---------|--------------|
-| `docker` | Container & Swarm metrics | HEC, Swarm Monitor |
-| `linux` | System logs | syslog, kern.log |
-| `security` | Authentication logs | auth.log |
-| `network` | Network logs | Future use |
+| Index      | Purpose                   | Data Sources       |
+| ---------- | ------------------------- | ------------------ |
+| `docker`   | Container & Swarm metrics | HEC, Swarm Monitor |
+| `linux`    | System logs               | syslog, kern.log   |
+| `security` | Authentication logs       | auth.log           |
+| `network`  | Network logs              | Future use         |
 
 ## 🔍 Sample Searches
 
