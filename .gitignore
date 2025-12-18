@@ -1,0 +1,52 @@
+# =============================================================================
+# Splunk Home Lab - Git Ignore File
+# =============================================================================
+
+# Environment configuration with secrets
+config/environment.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Splunk data directories (if accidentally included)
+splunk-data/
+splunkforwarder-data/
+
+# SSH keys (never commit these!)
+*.pem
+*.key
+id_rsa*
+
+# Backup files
+*.bak
+*.backup
+
+# Package files
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+venv/
+
