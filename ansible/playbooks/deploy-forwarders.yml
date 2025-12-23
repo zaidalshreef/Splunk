@@ -1,0 +1,270 @@
+---
+# =============================================================================
+# Deploy Splunk Universal Forwarders to All VMs
+# =============================================================================
+# Usage: ansible-playbook -i inventory/hosts.yml playbooks/deploy-forwarders.yml
+# =============================================================================
+
+- name: Deploy Splunk Universal Forwarders
+  hosts: splunk_forwarders
+  become: true
+  
+  tasks:
+    # -------------------------------------------------------------------------
+    # Pre-requisites
+    # -------------------------------------------------------------------------
+    - name: Install required packages
+      apt:
+        name: "{{ monitoring_packages }}"
+        state: present
+        update_cache: yes
+      tags: packages
+
+    - name: Ensure Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      tags: docker
+
+    # -------------------------------------------------------------------------
+    # Configure Audit Daemon
+    # -------------------------------------------------------------------------
+    - name: Configure audit rules
+      copy:
+        content: |
+          # Splunk Audit Rules
+          -D
+          -b 8192
+          -f 1
+          {% for rule in audit_rules %}
+          {{ rule }}
+          {% endfor %}
+        dest: /etc/audit/rules.d/splunk.rules
+        mode: '0640'
+      notify: Restart auditd
+      tags: audit
+
+    - name: Ensure audit.log is readable
+      file:
+        path: /var/log/audit/audit.log
+        mode: '0644'
+      ignore_errors: yes
+      tags: audit
+
+    - name: Create audit permission fix service
+      copy:
+        content: |
+          [Unit]
+          Description=Fix audit.log permissions for Splunk
+          
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/chmod 644 /var/log/audit/audit.log
+        dest: /etc/systemd/system/fix-audit-perms.service
+        mode: '0644'
+      tags: audit
+
+    - name: Create audit permission fix timer
+      copy:
+        content: |
+          [Unit]
+          Description=Fix audit.log permissions every minute
+          
+          [Timer]
+          OnBootSec=1min
+          OnUnitActiveSec=1min
+          
+          [Install]
+          WantedBy=timers.target
+        dest: /etc/systemd/system/fix-audit-perms.timer
+        mode: '0644'
+      notify: Enable audit timer
+      tags: audit
+
+    # -------------------------------------------------------------------------
+    # Docker Metrics Collector
+    # -------------------------------------------------------------------------
+    - name: Deploy Docker metrics collector script
+      copy:
+        content: |
+          #!/bin/bash
+          # Docker Metrics Collector for Splunk
+          
+          LOGFILE="/var/log/docker-metrics.log"
+          HOSTNAME=$(hostname)
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")
+          
+          # Collect container stats
+          for container in $(docker ps -q 2>/dev/null); do
+            name=$(docker inspect --format='{{ "{{" }}.Name{{ "}}" }}' "$container" | sed 's/^\///')
+            stats=$(docker stats --no-stream --format '{{ "{{" }}json .{{ "}}" }}' "$container" 2>/dev/null)
+            if [ -n "$stats" ]; then
+              echo "{\"timestamp\":\"$TIMESTAMP\",\"host\":\"$HOSTNAME\",\"event_type\":\"docker_stats\",\"container_id\":\"$container\",\"container_name\":\"$name\",\"stats\":$stats}" >> "$LOGFILE"
+            fi
+          done
+          
+          # Collect container health/status
+          for container in $(docker ps -aq 2>/dev/null); do
+            info=$(docker inspect --format='{"container_id":"{{ "{{" }}.Id{{ "}}" }}","container_name":"{{ "{{" }}.Name{{ "}}" }}","state":"{{ "{{" }}.State.Status{{ "}}" }}","health":"{{ "{{" }}if .State.Health{{ "}}" }}{{ "{{" }}.State.Health.Status{{ "}}" }}{{ "{{" }}else{{ "}}" }}none{{ "{{" }}end{{ "}}" }}","started_at":"{{ "{{" }}.State.StartedAt{{ "}}" }}","restart_count":{{ "{{" }}.RestartCount{{ "}}" }}}' "$container" 2>/dev/null)
+            if [ -n "$info" ]; then
+              echo "{\"timestamp\":\"$TIMESTAMP\",\"host\":\"$HOSTNAME\",\"event_type\":\"docker_container\",$info}" >> "$LOGFILE"
+            fi
+          done
+          
+          # Collect Swarm info (only on managers)
+          if docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}' 2>/dev/null | grep -q "active"; then
+            # Node info
+            docker node ls --format '{{ "{{" }}json .{{ "}}" }}' 2>/dev/null | while read line; do
+              echo "{\"timestamp\":\"$TIMESTAMP\",\"host\":\"$HOSTNAME\",\"event_type\":\"docker_swarm_node\",\"data\":$line}" >> "$LOGFILE"
+            done
+            
+            # Service info
+            docker service ls --format '{{ "{{" }}json .{{ "}}" }}' 2>/dev/null | while read line; do
+              echo "{\"timestamp\":\"$TIMESTAMP\",\"host\":\"$HOSTNAME\",\"event_type\":\"docker_swarm_service\",\"data\":$line}" >> "$LOGFILE"
+            done
+          fi
+        dest: /opt/docker-metrics-collector.sh
+        mode: '0755'
+      tags: metrics
+
+    - name: Create Docker metrics collector service
+      copy:
+        content: |
+          [Unit]
+          Description=Docker Metrics Collector for Splunk
+          
+          [Service]
+          Type=oneshot
+          ExecStart=/opt/docker-metrics-collector.sh
+        dest: /etc/systemd/system/docker-metrics-collector.service
+        mode: '0644'
+      tags: metrics
+
+    - name: Create Docker metrics collector timer
+      copy:
+        content: |
+          [Unit]
+          Description=Run Docker Metrics Collector every minute
+          
+          [Timer]
+          OnBootSec=30sec
+          OnUnitActiveSec=1min
+          
+          [Install]
+          WantedBy=timers.target
+        dest: /etc/systemd/system/docker-metrics-collector.timer
+        mode: '0644'
+      notify: Enable metrics timer
+      tags: metrics
+
+    - name: Create empty docker-metrics.log
+      file:
+        path: /var/log/docker-metrics.log
+        state: touch
+        mode: '0644'
+      tags: metrics
+
+    # -------------------------------------------------------------------------
+    # Deploy Splunk Universal Forwarder Container
+    # -------------------------------------------------------------------------
+    - name: Stop existing forwarder container
+      docker_container:
+        name: "{{ forwarder_container_name }}"
+        state: absent
+      ignore_errors: yes
+      tags: forwarder
+
+    - name: Remove old forwarder volumes
+      docker_volume:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - splunk-uf-etc
+        - splunk-uf-var
+      ignore_errors: yes
+      tags: forwarder
+
+    - name: Pull Splunk Universal Forwarder image
+      docker_image:
+        name: "{{ splunk_forwarder_image }}"
+        source: pull
+      tags: forwarder
+
+    - name: Deploy Splunk Universal Forwarder
+      docker_container:
+        name: "{{ forwarder_container_name }}"
+        image: "{{ splunk_forwarder_image }}"
+        state: started
+        restart_policy: "{{ forwarder_restart_policy }}"
+        hostname: "{{ inventory_hostname }}-uf"
+        network_mode: host
+        env:
+          SPLUNK_START_ARGS: "--accept-license"
+          SPLUNK_PASSWORD: "{{ splunk_admin_password }}"
+        volumes: "{{ forwarder_volumes }}"
+      tags: forwarder
+
+    - name: Wait for forwarder to start
+      pause:
+        seconds: 60
+      tags: forwarder
+
+    # -------------------------------------------------------------------------
+    # Configure Forwarder
+    # -------------------------------------------------------------------------
+    - name: Configure forward server
+      command: >
+        docker exec -u splunk {{ forwarder_container_name }}
+        /opt/splunkforwarder/bin/splunk add forward-server
+        {{ splunk_indexer_ip }}:{{ splunk_indexer_port }}
+        -auth admin:{{ splunk_admin_password }}
+      register: forward_result
+      failed_when: false
+      changed_when: "'Added forwarding to' in forward_result.stdout"
+      tags: forwarder
+
+    - name: Configure log monitors
+      command: >
+        docker exec -u splunk {{ forwarder_container_name }}
+        /opt/splunkforwarder/bin/splunk add monitor
+        {{ item.path }}
+        -sourcetype {{ item.sourcetype }}
+        -index {{ item.index }}
+        -auth admin:{{ splunk_admin_password }}
+      loop: "{{ splunk_forwarder_inputs }}"
+      register: monitor_result
+      failed_when: false
+      changed_when: "'Added monitor' in monitor_result.stdout"
+      tags: forwarder
+
+    - name: Restart forwarder to apply changes
+      command: >
+        docker exec -u splunk {{ forwarder_container_name }}
+        /opt/splunkforwarder/bin/splunk restart
+      tags: forwarder
+
+  # ---------------------------------------------------------------------------
+  # Handlers
+  # ---------------------------------------------------------------------------
+  handlers:
+    - name: Restart auditd
+      service:
+        name: auditd
+        state: restarted
+      ignore_errors: yes
+
+    - name: Enable audit timer
+      systemd:
+        name: fix-audit-perms.timer
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Enable metrics timer
+      systemd:
+        name: docker-metrics-collector.timer
+        state: started
+        enabled: yes
+        daemon_reload: yes
+

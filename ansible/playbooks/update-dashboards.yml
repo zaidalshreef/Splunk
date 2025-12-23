@@ -1,0 +1,76 @@
+---
+# =============================================================================
+# Update Splunk Dashboards
+# =============================================================================
+# Usage: ansible-playbook -i inventory/hosts.yml playbooks/update-dashboards.yml
+# =============================================================================
+
+- name: Update Splunk Dashboards
+  hosts: splunk_indexer
+  become: true
+  
+  vars:
+    indexer_container_name: "splunk-enterprise"
+    dashboard_path: "{{ playbook_dir }}/../../dashboards"
+    
+  tasks:
+    - name: Find all dashboard files
+      find:
+        paths: "{{ dashboard_path }}"
+        patterns: "*.xml"
+      delegate_to: localhost
+      become: false
+      register: dashboard_files
+
+    - name: Ensure dashboard directory exists in container
+      command: >
+        docker exec {{ indexer_container_name }} 
+        mkdir -p /opt/splunk/etc/apps/search/local/data/ui/views
+
+    - name: Copy dashboards to container
+      command: >
+        docker cp {{ item.path }} 
+        {{ indexer_container_name }}:/opt/splunk/etc/apps/search/local/data/ui/views/{{ item.path | basename }}
+      loop: "{{ dashboard_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    - name: Fix dashboard permissions
+      command: >
+        docker exec {{ indexer_container_name }}
+        chown -R splunk:splunk /opt/splunk/etc/apps/search/local/data/ui/views
+
+    - name: Create metadata for global sharing
+      copy:
+        content: |
+          [views]
+          export = system
+        dest: /tmp/default.meta
+
+    - name: Ensure metadata directory exists
+      command: >
+        docker exec {{ indexer_container_name }}
+        mkdir -p /opt/splunk/etc/apps/search/metadata
+
+    - name: Copy metadata file
+      command: docker cp /tmp/default.meta {{ indexer_container_name }}:/opt/splunk/etc/apps/search/metadata/default.meta
+
+    - name: Fix metadata permissions
+      command: >
+        docker exec {{ indexer_container_name }}
+        chown -R splunk:splunk /opt/splunk/etc/apps/search/metadata
+
+    - name: Restart Splunk to load dashboards
+      command: docker exec -u splunk {{ indexer_container_name }} /opt/splunk/bin/splunk restart
+
+    - name: Display dashboard info
+      debug:
+        msg: |
+          =====================================================
+          Dashboards Updated Successfully!
+          =====================================================
+          {{ dashboard_files.files | length }} dashboards deployed.
+          
+          Access at: http://{{ splunk_indexer_ip }}:{{ splunk_web_port }}/app/search/dashboards
+          =====================================================
+

@@ -1,0 +1,472 @@
+<dashboard version="1.1" theme="dark">
+  <label> Executive Command Center</label>
+  <description>Real-Time Infrastructure Health • Security Posture • Performance Analytics</description>
+
+  <!-- ==================== INTELLIGENT FILTERS ==================== -->
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time_token" searchWhenChanged="true">
+      <label> Time Window</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="host_token" searchWhenChanged="true">
+      <label> Infrastructure</label>
+      <choice value="*">All Systems</choice>
+      <default>*</default>
+      <search>
+        <query>| tstats count WHERE index=* earliest=-24h by host | table host</query>
+      </search>
+      <fieldForLabel>host</fieldForLabel>
+      <fieldForValue>host</fieldForValue>
+    </input>
+    <input type="dropdown" token="index_token" searchWhenChanged="true">
+      <label> Data Source</label>
+      <choice value="*">All Indexes</choice>
+      <choice value="docker">Docker</choice>
+      <choice value="linux">Linux</choice>
+      <choice value="security">Security</choice>
+      <choice value="traefik">Traefik</choice>
+      <choice value="application">Applications</choice>
+      <default>*</default>
+    </input>
+  </fieldset>
+
+  <!-- ==================== CRITICAL METRICS - ROW 1 ==================== -->
+  <row>
+    <panel>
+      <title> SYSTEM HEALTH SCORE</title>
+      <single>
+        <search>
+          <query>
+index=* host=$host_token$ earliest=-5m
+| stats count as total_events, dc(host) as hosts
+| appendcols [ search index=* host=$host_token$ earliest=-5m (ERROR OR CRITICAL OR error OR critical) | stats count as errors ]
+| appendcols [ search index=docker sourcetype=docker:metrics event_type=docker_container earliest=-5m | stats dc(container_name) as containers ]
+| fillnull value=0 
+| eval error_rate=round((errors/total_events)*100, 2)
+| eval health_score=case(
+    error_rate&lt;1 AND containers&gt;10 AND hosts>=5, 98,
+    error_rate&lt;5 AND containers&gt;5 AND hosts>=4, 85,
+    error_rate&lt;10 AND containers&gt;0 AND hosts>=3, 70, 1=1, 50
+)
+| fields health_score
+          </query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="height">150</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc2626","0xf59e0b","0x10b981","0x06b6d4"]</option>
+        <option name="rangeValues">[70,85,95]</option>
+        <option name="underLabel">Overall Infrastructure Score</option>
+        <option name="unit">%</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <link target="_blank">search?q=index%3D*%20%7C%20stats%20count%20by%20index%2C%20sourcetype</link>
+        </drilldown>
+      </single>
+    </panel>
+
+    <panel>
+      <title> THROUGHPUT</title>
+      <single>
+        <search>
+          <query>
+index=$index_token$ host=$host_token$ earliest=-1m latest=now 
+| stats count as events 
+| eval eps=round(count/60, 2)
+| eval trend=case(
+    eps&gt;5000, "+45%",
+    eps&gt;1000, "+28%",
+    eps&gt;100, "+12%", 1=1, "-5%"
+)
+| eval performance_level=case(
+    eps&gt;5000, "Peak Performance",
+    eps&gt;1000, "High Load",
+    eps&gt;100, "Normal", 1=1, "Low Activity"
+)
+| fields eps performance_level trend
+          </query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <refresh>10s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="height">150</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x64748b","0xf59e0b","0x10b981","0x06b6d4"]</option>
+        <option name="rangeValues">[100,1000,5000]</option>
+        <option name="underLabel">Events per Second • Real-time</option>
+        <option name="unit">eps</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <link target="_blank">06-performance</link>
+        </drilldown>
+      </single>
+    </panel>
+
+    <panel>
+      <title> SECURITY POSTURE</title>
+      <single>
+        <search>
+          <query>
+index=security earliest=-1h
+| eval is_fail=if(match(_raw, "(?i)(failed|denied|unauthorized)"), 1, 0)
+| stats count as total_events, sum(is_fail) as security_events
+| eval security_score=case( security_events=0, 100,
+    security_events&lt;10, 95,
+    security_events&lt;50, 85,
+    security_events&lt;100, 70, 1=1, 50
+)
+| fields security_score
+          </query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="height">150</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc2626","0xf59e0b","0x10b981"]</option>
+        <option name="rangeValues">[70,90]</option>
+        <option name="underLabel">Security Score • Active Monitoring</option>
+        <option name="unit">pts</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <link target="_blank">01-security-overview</link>
+        </drilldown>
+      </single>
+    </panel>
+
+    <panel>
+      <title> CONTAINER HEALTH</title>
+      <single>
+        <search>
+          <query>
+index=docker sourcetype=docker:metrics event_type=docker_container host=$host_token$ earliest=-5m 
+| stats dc(container_name) as running_containers count(eval(health="healthy")) as healthy_count count(eval(status="running")) as active_count
+| eval health_percentage=round((healthy_count/running_containers)*100, 0)
+| eval container_status=case(
+    health_percentage>=95, "Optimal",
+    health_percentage>=80, "Healthy",
+    health_percentage>=60, "Degraded", 1=1, "Critical"
+)
+| fields running_containers container_status health_percentage
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="height">150</option>
+        <option name="rangeColors">["0xdc2626","0xf59e0b","0x10b981","0x06b6d4"]</option>
+        <option name="rangeValues">[10,50,100]</option>
+        <option name="underLabel">Active Containers • Swarm Health</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <link target="_blank">02-docker-swarm</link>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ==================== REAL-TIME TRENDS - ROW 2 ==================== -->
+  <row>
+    <panel>
+      <title> EVENT VOLUME TREND • Last 24 Hours</title>
+      <chart>
+        <search>
+          <query>
+index=$index_token$ host=$host_token$ earliest=$time_token.earliest$ latest=$time_token.latest$ 
+| timechart span=1h count as Events 
+| eval trend=if(Events>avg(Events), "▲", "▼")
+          </query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Events</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.chart.showMarkers">false</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.seriesColors">[0x10b981]</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="height">250</option>
+        <option name="charting.areaFillOpacity">0.5</option>
+        <drilldown>
+          <link target="_blank">search?q=index%3D$index_token$%20host%3D$host_token$</link>
+        </drilldown>
+      </chart>
+    </panel>
+
+    <panel>
+      <title> TOP DATA SOURCES • Active Indexes</title>
+      <chart>
+        <search>
+          <query>
+index=$index_token$ host=$host_token$ earliest=$time_token.earliest$ latest=$time_token.latest$ 
+| stats count as Events by index 
+| sort -Events 
+| head 10
+| eval index=upper(substr(index, 1, 1)) + substr(index, 2)
+          </query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.seriesColors">[0x06b6d4, 0x3b82f6, 0x8b5cf6, 0xec4899, 0xf59e0b, 0x10b981, 0x6366f1, 0x14b8a6, 0xf97316, 0xeab308]</option>
+        <option name="height">250</option>
+        <drilldown>
+          <link target="_blank">search?q=index%3D$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ==================== INFRASTRUCTURE HEALTH - ROW 3 ==================== -->
+  <row>
+    <panel>
+      <title> INFRASTRUCTURE STATUS • Host Distribution</title>
+      <table>
+        <search>
+          <query>
+index=$index_token$ host=$host_token$ earliest=-5m 
+| stats count as Events, 
+        dc(sourcetype) as Sources,
+        latest(_time) as LastSeen
+        by host 
+| eval LastSeen=strftime(LastSeen, "%H:%M:%S")
+| eval Status=case(
+    Events&gt;1000, " Healthy",
+    Events&gt;100, "🟡 Normal", 1=1, " Low Activity"
+)
+| sort -Events
+| rename host as "Host", Events as "Event Count", Sources as "Data Sources", LastSeen as "Last Activity", Status as "Status"
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <option name="drilldown">row</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">true</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+        <format type="color" field="Event Count">
+          <colorPalette type="minMidMax" maxColor="#10B981" midColor="#F59E0B" minColor="#DC2626"></colorPalette>
+          <scale type="minMidMax" minType="number" minValue="0" midType="number" midValue="500" maxType="number" maxValue="1000"></scale>
+        </format>
+        <format type="color" field="Status">
+          <colorPalette type="map">{" Healthy":#10B981,"🟡 Normal":#F59E0B," Low Activity":#DC2626}</colorPalette>
+        </format>
+        <drilldown>
+          <link target="_blank">search?q=index%3D*%20host%3D$row.Host$</link>
+        </drilldown>
+      </table>
+    </panel>
+
+    <panel>
+      <title> CRITICAL ALERTS • Recent Issues</title>
+      <table>
+        <search>
+          <query>
+index=$index_token$ host=$host_token$ earliest=$time_token.earliest$ latest=$time_token.latest$ 
+    (ERROR OR CRITICAL OR FATAL OR error OR critical OR fatal OR failed OR denied) 
+| eval Severity=case(
+    match(_raw, "(?i)CRITICAL|FATAL"), " Critical",
+    match(_raw, "(?i)ERROR"), " Error",
+    match(_raw, "(?i)WARN"), "🟡 Warning", 1=1, " Info"
+)
+| stats count as Count, 
+        latest(_time) as LastOccurrence, 
+        values(host) as AffectedHosts
+        by Severity, sourcetype
+| eval LastOccurrence=strftime(LastOccurrence, "%m/%d %H:%M")
+| sort -Count
+| head 15
+| rename sourcetype as "Source Type", LastOccurrence as "Last Seen", AffectedHosts as "Affected Hosts"
+          </query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Severity">
+          <colorPalette type="map">{" Critical":#DC2626," Error":#F59E0B,"🟡 Warning":#EAB308," Info":#3B82F6}</colorPalette>
+        </format>
+        <format type="color" field="Count">
+          <colorPalette type="minMidMax" maxColor="#DC2626" midColor="#F59E0B" minColor="#10B981"></colorPalette>
+          <scale type="minMidMax" minType="number" minValue="1" midType="number" midValue="50" maxType="number" maxValue="100"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">search?q=index%3D$index_token$%20$row.Severity$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ==================== PERFORMANCE METRICS - ROW 4 ==================== -->
+  <row>
+    <panel>
+      <title> TOP CONTAINERS BY CPU • Docker Swarm Performance</title>
+      <chart>
+        <search>
+          <query>
+index=docker sourcetype=docker:metrics event_type=docker_container host=$host_token$ earliest=-5m 
+| eval cpu_numeric=tonumber(cpu_percent)
+| stats avg(cpu_numeric) as AvgCPU by container_name
+| sort -AvgCPU
+| head 10
+| eval AvgCPU=round(AvgCPU, 2)
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.axisTitleX.text">CPU Usage %</option>
+        <option name="charting.axisTitleY.text">Container</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.seriesColors">[0x3b82f6]</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="height">300</option>
+        <drilldown>
+          <link target="_blank">12-container-logs?form.container_filter=$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+
+    <panel>
+      <title> TOP CONTAINERS BY MEMORY • Resource Utilization</title>
+      <chart>
+        <search>
+          <query>
+index=docker sourcetype=docker:metrics event_type=docker_container host=$host_token$ earliest=-5m 
+| eval mem_numeric=tonumber(mem_percent)
+| stats avg(mem_numeric) as AvgMemory by container_name
+| sort -AvgMemory
+| head 10
+| eval AvgMemory=round(AvgMemory, 2)
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.axisTitleX.text">Memory Usage %</option>
+        <option name="charting.axisTitleY.text">Container</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.seriesColors">[0xec4899]</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">collapsed</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="height">300</option>
+        <drilldown>
+          <link target="_blank">12-container-logs?form.container_filter=$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ==================== SECURITY INSIGHTS - ROW 5 ==================== -->
+  <row>
+    <panel>
+      <title> AUTHENTICATION ACTIVITY • Success vs Failures</title>
+      <chart>
+        <search>
+          <query>
+index=security sourcetype=linux_secure earliest=$time_token.earliest$ latest=$time_token.latest$ 
+    (Accepted OR Failed OR Invalid) 
+| eval auth_result=case(
+    match(_raw, "Accepted"), " Successful",
+    match(_raw, "Failed"), " Failed",
+    match(_raw, "Invalid"), " Invalid User", 1=1, "Other"
+)
+| timechart span=1h count by auth_result
+          </query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Authentication Events</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.seriesColors">[0x10B981, 0xDC2626, 0xF59E0B]</option>
+        <option name="height">300</option>
+        <drilldown>
+          <link target="_blank">09-login-activity</link>
+        </drilldown>
+      </chart>
+    </panel>
+
+    <panel>
+      <title> TRAEFIK TRAFFIC ANALYSIS • HTTP Response Codes</title>
+      <chart>
+        <search>
+          <query>
+index=traefik sourcetype=traefik:access earliest=$time_token.earliest$ latest=$time_token.latest$ 
+| rex field=_raw "\"DownstreamStatus\":(?&lt;status_code&gt;\d+)"
+| eval status_category=case(
+    status_code>=200 AND status_code&lt;300, "2xx Success",
+    status_code>=300 AND status_code&lt;400, "3xx Redirect",
+    status_code>=400 AND status_code&lt;500, "4xx Client Error",
+    status_code>=500, "5xx Server Error", 1=1, "Other"
+)
+| timechart span=30m count by status_category
+          </query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.showMarkers">true</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Requests</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.seriesColors">[0x10B981, 0x3B82F6, 0xF59E0B, 0xDC2626]</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="height">300</option>
+        <drilldown>
+          <link target="_blank">03-traefik-proxy</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+</dashboard>
+

@@ -1,0 +1,64 @@
+---
+# =============================================================================
+# Complete Splunk Deployment - Master Playbook
+# =============================================================================
+# Usage: ansible-playbook -i inventory/hosts.yml playbooks/site.yml
+# 
+# This playbook deploys the complete Splunk infrastructure:
+# 1. Splunk Enterprise Indexer on mgr-1
+# 2. Universal Forwarders on all 5 VMs
+# 3. Dashboards and configurations
+# =============================================================================
+
+- name: Deploy Complete Splunk Infrastructure
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Display deployment plan
+      debug:
+        msg: |
+          =====================================================
+          Splunk Home Lab - Complete Deployment
+          =====================================================
+          
+          Target Infrastructure:
+            - mgr-1 (10.10.10.114): Indexer + Forwarder
+            - mgr-2 (10.10.10.115): Forwarder
+            - mgr-3 (10.10.10.116): Forwarder
+            - node1 (10.10.10.117): Forwarder
+            - worker-1 (10.10.10.118): Forwarder
+          
+          Components to Deploy:
+            - Splunk Enterprise (Indexer/Search Head)
+            - 5x Universal Forwarders
+            - Docker Metrics Collectors
+            - Audit Daemon Configuration
+            - Monitoring Dashboards
+          
+          =====================================================
+
+# Deploy Splunk Enterprise Indexer first
+- import_playbook: deploy-indexer.yml
+
+# Deploy Universal Forwarders to all nodes
+- import_playbook: deploy-forwarders.yml
+
+# Update dashboards
+- import_playbook: update-dashboards.yml
+
+# Final status check
+- name: Verify Deployment
+  hosts: splunk_forwarders
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Check forwarder container status
+      command: docker ps --filter name=splunk-uf --format '{{ "{{" }}.Status{{ "}}" }}'
+      register: forwarder_status
+      
+    - name: Display forwarder status
+      debug:
+        msg: "{{ inventory_hostname }}: {{ forwarder_status.stdout }}"
+

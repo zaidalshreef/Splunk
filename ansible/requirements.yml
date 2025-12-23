@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# Ansible Galaxy Requirements
+# =============================================================================
+# Install with: ansible-galaxy install -r requirements.yml
+# =============================================================================
+
+collections:
+  - name: community.docker
+    version: ">=3.0.0"
+  - name: community.general
+    version: ">=6.0.0"
+  - name: ansible.posix
+    version: ">=1.5.0"
+
+roles:
+  # Official Splunk Ansible Role (optional - for bare metal installs)
+  # Uncomment if you want to use Splunk's official role for non-Docker deployments
+  # - src: https://github.com/splunk/ansible-role-for-splunk.git
+  #   scm: git
+  #   version: master
+  #   name: splunk.splunk
+

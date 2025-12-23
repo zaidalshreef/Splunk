@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# Deploy AppDynamics Agents for APM
+# =============================================================================
+# Usage: ansible-playbook -i inventory/hosts.yml playbooks/appdynamics-deploy.yml
+#
+# This playbook deploys AppDynamics agents alongside Splunk for complete
+# observability: Splunk for SIEM/Logs + AppDynamics for APM
+# =============================================================================
+
+- name: Deploy AppDynamics Machine Agents
+  hosts: swarm_nodes
+  become: true
+  
+  vars:
+    # AppDynamics Controller Configuration
+    # Update these with your AppDynamics account details
+    appdynamics_controller_host: "your-controller.saas.appdynamics.com"
+    appdynamics_controller_port: 443
+    appdynamics_controller_ssl: true
+    appdynamics_account_name: "your-account"
+    appdynamics_account_access_key: "your-access-key"
+    appdynamics_application_name: "DockerSwarmCluster"
+    
+    # Docker Image
+    appdynamics_machine_agent_image: "appdynamics/machine-agent:latest"
+    appdynamics_container_name: "appdynamics-machine-agent"
+
+  tasks:
+    - name: Pull AppDynamics Machine Agent image
+      docker_image:
+        name: "{{ appdynamics_machine_agent_image }}"
+        source: pull
+      tags: appdynamics
+
+    - name: Stop existing AppDynamics container
+      docker_container:
+        name: "{{ appdynamics_container_name }}"
+        state: absent
+      ignore_errors: yes
+      tags: appdynamics
+
+    - name: Deploy AppDynamics Machine Agent
+      docker_container:
+        name: "{{ appdynamics_container_name }}"
+        image: "{{ appdynamics_machine_agent_image }}"
+        state: started
+        restart_policy: unless-stopped
+        network_mode: host
+        pid_mode: host
+        env:
+          APPDYNAMICS_CONTROLLER_HOST_NAME: "{{ appdynamics_controller_host }}"
+          APPDYNAMICS_CONTROLLER_PORT: "{{ appdynamics_controller_port }}"
+          APPDYNAMICS_CONTROLLER_SSL_ENABLED: "{{ appdynamics_controller_ssl }}"
+          APPDYNAMICS_AGENT_ACCOUNT_NAME: "{{ appdynamics_account_name }}"
+          APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY: "{{ appdynamics_account_access_key }}"
+          APPDYNAMICS_AGENT_APPLICATION_NAME: "{{ appdynamics_application_name }}"
+          APPDYNAMICS_AGENT_TIER_NAME: "{{ inventory_hostname }}"
+          APPDYNAMICS_AGENT_NODE_NAME: "{{ inventory_hostname }}-machine"
+          APPDYNAMICS_SIM_ENABLED: "true"
+          APPDYNAMICS_DOCKER_ENABLED: "true"
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+          - /:/hostroot:ro
+          - /proc:/hostproc:ro
+          - /sys:/hostsys:ro
+      tags: appdynamics
+
+    - name: Display AppDynamics status
+      debug:
+        msg: |
+          AppDynamics Machine Agent deployed on {{ inventory_hostname }}
+          Application: {{ appdynamics_application_name }}
+          Tier: {{ inventory_hostname }}
+
+# =============================================================================
+# Optional: Deploy Cluster Agent for Kubernetes/Docker Swarm visibility
+# =============================================================================
+- name: Deploy AppDynamics Cluster Agent (Manager Only)
+  hosts: mgr-1
+  become: true
+  
+  vars:
+    appdynamics_cluster_agent_image: "appdynamics/cluster-agent:latest"
+    appdynamics_cluster_agent_name: "appdynamics-cluster-agent"
+    
+  tasks:
+    - name: Note about Cluster Agent
+      debug:
+        msg: |
+          =====================================================
+          AppDynamics Cluster Agent
+          =====================================================
+          
+          The Cluster Agent provides deep visibility into:
+          - Docker Swarm services
+          - Container orchestration
+          - Resource allocation
+          
+          For Docker Swarm, consider using the Server Visibility
+          extension instead of the Kubernetes Cluster Agent.
+          
+          See: https://docs.appdynamics.com/
+          =====================================================
+      tags: appdynamics
+

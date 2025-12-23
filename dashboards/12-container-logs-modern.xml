@@ -1,0 +1,439 @@
+<form version="1.1" theme="dark">
+  <label> Container Logs Command Center</label>
+  <description>Real-time Container Log Analysis, Error Detection, and Log Stream Monitoring</description>
+  
+  <!-- ============================================== -->
+  <!-- GLOBAL SETTINGS -->
+  <!-- ============================================== -->
+  <fieldset submitButton="true" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-15m</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="host_filter" searchWhenChanged="true">
+      <label>Host</label>
+      <choice value="*">All Hosts</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+      <fieldForLabel>host</fieldForLabel>
+      <fieldForValue>host</fieldForValue>
+      <search>
+        <query>index=docker sourcetype="docker:container:json" | stats count by host</query>
+        <earliest>$time.earliest$</earliest>
+        <latest>$time.latest$</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="container_filter" searchWhenChanged="true">
+      <label>Container</label>
+      <choice value="*">All Containers</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+      <fieldForLabel>container_name</fieldForLabel>
+      <fieldForValue>container_name</fieldForValue>
+      <search>
+        <query>index=docker sourcetype="docker:container:json" container_name=* 
+| stats count by container_name</query>
+        <earliest>$time.earliest$</earliest>
+        <latest>$time.latest$</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="stream_filter" searchWhenChanged="true">
+      <label>Log Stream</label>
+      <choice value="*">All</choice>
+      <choice value="stdout">stdout</choice>
+      <choice value="stderr">stderr</choice>
+      <default>*</default>
+    </input>
+    <input type="dropdown" token="level_filter" searchWhenChanged="true">
+      <label>Log Level</label>
+      <choice value="*">All Levels</choice>
+      <choice value="ERROR">ERROR</choice>
+      <choice value="WARN">WARN</choice>
+      <choice value="INFO">INFO</choice>
+      <choice value="DEBUG">DEBUG</choice>
+      <default>*</default>
+    </input>
+    <input type="text" token="search_text" searchWhenChanged="true">
+      <label>Search Text</label>
+      <default>*</default>
+    </input>
+  </fieldset>
+
+  <!-- ============================================== -->
+  <!-- KEY METRICS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title> Total Log Events</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ log_message=$search_text$ earliest=$time.earliest$ latest=$time.latest$
+| search log_message=$level_filter$
+| stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="underLabel">Log Lines</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Error Count</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| search log_message="*ERROR*" OR log_message="*error*" OR log_message="*Exception*" OR log_message="*FATAL*" OR stream="stderr"
+| stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,10,50,100]</option>
+        <option name="underLabel">Errors Detected</option>
+        <option name="useColors">1</option>
+        <option name="numberPrecision">0</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20%28ERROR%20OR%20error%20OR%20Exception%29&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Warning Count</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| search log_message="*WARN*" OR log_message="*warn*" OR log_message="*Warning*"
+| stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,20,100,200]</option>
+        <option name="underLabel">Warnings Detected</option>
+        <option name="useColors">1</option>
+        <option name="numberPrecision">0</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20%28WARN%20OR%20warn%20OR%20Warning%29&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Active Containers</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats dc(container_name) as unique_containers</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">Logging Containers</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0</option>
+      </single>
+    </panel>
+    <panel>
+      <title> Logs Per Second</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count as total_logs
+| eval time_range=relative_time(now(), "$time.earliest$")
+| eval duration_seconds=now()-time_range
+| eval lps=round(total_logs/duration_seconds, 2)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">Log Velocity</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="unit">lps</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- LOG VOLUME TRENDS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Log Volume Over Time</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| timechart span=30s count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Log Events</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Error &amp; Warning Timeline</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval log_level=case(
+    match(log_message, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", "Error",
+    match(log_message, "(?i)(WARN|warn|Warning)"), "Warning",
+    1=1, "Other"
+)
+| search log_level!="Other"
+| timechart span=1m count by log_level</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Count</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.fieldColors">{"Error":"#dc4e41","Warning":"#f8be34"}</option>
+        <option name="charting.chart.showMarkers">true</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- TOP CONTAINERS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Top 15 Containers by Log Volume</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
+| eval container_display=if(len(container_display)&gt;40, substr(container_display,1,37)."...", container_display)
+| stats count as log_events by container_display
+| sort -log_events
+| head 15</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Log Events</option>
+        <option name="charting.axisTitleY.text">Container</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20container_name%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- ERROR ANALYSIS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Containers with Most Errors</title>
+      <table>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
+| search log_message="*ERROR*" OR log_message="*error*" OR log_message="*Exception*" OR log_message="*FATAL*" OR stream="stderr"
+| stats count as error_count by container_display, host
+| sort -error_count
+| head 15
+| eval severity=case(
+    error_count&gt;=100, " Critical",
+    error_count&gt;=50, " High",
+    error_count&gt;=10, "🟡 Medium",
+    1=1, " Low"
+)
+| table severity, container_display, host, error_count
+| rename severity as "Severity", container_display as "Container", host as "Host", error_count as "Error Count"</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <format type="color" field="Severity">
+          <colorPalette type="map">{" Critical":#dc4e41," High":#f1813f,"🟡 Medium":#f8be34," Low":#53a051}</colorPalette>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20container_name%3D%22$row.Container$%22%20%28ERROR%20OR%20error%29&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- LOG STREAM ANALYSIS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Log Stream Distribution (stdout vs stderr)</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval stream_display=if(stream="stdout", "stdout (Normal)", "stderr (Errors)")
+| stats count by stream_display</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="charting.fieldColors">{"stdout (Normal)":"#53a051","stderr (Errors)":"#dc4e41"}</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20stream%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Log Level Distribution</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval log_level=case(
+    match(log_message, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", "ERROR",
+    match(log_message, "(?i)(WARN|warn|Warning)"), "WARN",
+    match(log_message, "(?i)(INFO|info)"), "INFO",
+    match(log_message, "(?i)(DEBUG|debug)"), "DEBUG",
+    1=1, "OTHER"
+)
+| stats count by log_level
+| sort -count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="charting.fieldColors">{"ERROR":"#dc4e41","WARN":"#f8be34","INFO":"#6DB7C6","DEBUG":"#6c757d","OTHER":"#AE8EC1"}</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- RECENT ERRORS TABLE ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Recent Errors &amp; Exceptions (Last 50)</title>
+      <table>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
+| search log_message="*ERROR*" OR log_message="*error*" OR log_message="*Exception*" OR log_message="*FATAL*" OR stream="stderr"
+| eval log_message_short=if(len(log_message)&gt;150, substr(log_message,1,147)."...", log_message)
+| table _time, container_display, host, stream, log_message_short
+| rename _time as "Time", container_display as "Container", host as "Host", stream as "Stream", log_message_short as "Error Message"
+| head 50</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">row</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Stream">
+          <colorPalette type="map">{"stdout":#6DB7C6,"stderr":#dc4e41}</colorPalette>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20container_name%3D%22$row.Container$%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- LIVE LOG FEED ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Live Container Log Feed (Real-Time)</title>
+      <table>
+        <search>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ log_message=$search_text$ earliest=$time.earliest$ latest=$time.latest$
+| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
+| eval log_level=case(
+    match(log_message, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", " ERROR",
+    match(log_message, "(?i)(WARN|warn|Warning)"), "🟡 WARN",
+    match(log_message, "(?i)(INFO|info)"), " INFO",
+    match(log_message, "(?i)(DEBUG|debug)"), " DEBUG",
+    1=1, " OTHER"
+)
+| search log_level=$level_filter$
+| eval log_message_display=if(len(log_message)&gt;200, substr(log_message,1,197)."...", log_message)
+| table _time, log_level, container_display, host, log_message_display
+| rename _time as "Time", log_level as "Level", container_display as "Container", host as "Host", log_message_display as "Log Message"
+| head 100</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>5s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">row</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Level">
+          <colorPalette type="map">{" ERROR":#dc4e41,"🟡 WARN":#f8be34," INFO":#6DB7C6," DEBUG":#6c757d," OTHER":#AE8EC1}</colorPalette>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20container_name%3D%22$row.Container$%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+</form>
+

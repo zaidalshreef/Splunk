@@ -1,0 +1,34 @@
+# =============================================================================
+# Splunk Universal Forwarder - Group Variables
+# =============================================================================
+
+# Container settings
+forwarder_container_name: "splunk-uf"
+forwarder_restart_policy: "unless-stopped"
+
+# Volume mounts for forwarder container
+forwarder_volumes:
+  # Splunk configuration persistence
+  - "splunk-uf-etc:/opt/splunkforwarder/etc"
+  - "splunk-uf-var:/opt/splunkforwarder/var"
+  # System logs
+  - "/var/log:/host/var/log:ro"
+  # Docker socket for metrics
+  - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  # Docker container logs
+  - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
+  # Traefik logs (if exists)
+  - "/etc/dokploy/traefik/dynamic:/etc/dokploy/traefik/dynamic:ro"
+  # Dokploy application logs (if exists)
+  - "/etc/dokploy/logs:/etc/dokploy/logs:ro"
+  # Audit logs
+  - "/var/log/audit:/var/log/audit:ro"
+  # Docker metrics log
+  - "/var/log/docker-metrics.log:/var/log/docker-metrics.log:ro"
+
+# Environment variables for forwarder container
+forwarder_environment:
+  SPLUNK_START_ARGS: "--accept-license"
+  SPLUNK_PASSWORD: "{{ splunk_admin_password }}"
+  SPLUNK_STANDALONE_URL: "{{ splunk_indexer_ip }}"
+

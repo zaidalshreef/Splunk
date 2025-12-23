@@ -1,0 +1,442 @@
+<form version="1.1" theme="dark">
+  <label> Traefik Proxy Command Center</label>
+  <description>HTTP Traffic Analysis, Response Times, Error Rates, and Client Analytics</description>
+  
+  <!-- ============================================== -->
+  <!-- GLOBAL SETTINGS -->
+  <!-- ============================================== -->
+  <fieldset submitButton="true" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="status_filter" searchWhenChanged="true">
+      <label>HTTP Status</label>
+      <choice value="*">All</choice>
+      <choice value="2*">2xx Success</choice>
+      <choice value="3*">3xx Redirect</choice>
+      <choice value="4*">4xx Client Error</choice>
+      <choice value="5*">5xx Server Error</choice>
+      <default>*</default>
+    </input>
+    <input type="dropdown" token="method_filter" searchWhenChanged="true">
+      <label>HTTP Method</label>
+      <choice value="*">All Methods</choice>
+      <choice value="GET">GET</choice>
+      <choice value="POST">POST</choice>
+      <choice value="PUT">PUT</choice>
+      <choice value="DELETE">DELETE</choice>
+      <choice value="PATCH">PATCH</choice>
+      <choice value="HEAD">HEAD</choice>
+      <default>*</default>
+    </input>
+  </fieldset>
+
+  <!-- ============================================== -->
+  <!-- KEY METRICS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title> Total Requests</title>
+      <single>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="underLabel">HTTP Requests</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">reqs</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Avg Response Time</title>
+      <single>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats avg(Duration) as avg_duration
+| eval avg_duration=round(avg_duration, 0)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,500,1000,2000]</option>
+        <option name="underLabel">Milliseconds</option>
+        <option name="useColors">1</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">ms</option>
+      </single>
+    </panel>
+    <panel>
+      <title> Success Rate</title>
+      <single>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval status_category=case(
+    DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "success",
+    1=1, "error"
+)
+| stats count(eval(status_category="success")) as success_count, count as total
+| eval success_rate=round((success_count/total)*100, 1)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0xdc4e41","0xf1813f","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[0,90,95,99]</option>
+        <option name="underLabel">2xx Responses</option>
+        <option name="useColors">1</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title> Error Rate</title>
+      <single>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval status_category=case(
+    DownstreamStatus&gt;=500, "5xx",
+    DownstreamStatus&gt;=400, "4xx",
+    1=1, "ok"
+)
+| stats count(eval(status_category="5xx" OR status_category="4xx")) as error_count, count as total
+| eval error_rate=round((error_count/total)*100, 1)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[0,1,5,10]</option>
+        <option name="underLabel">4xx/5xx Errors</option>
+        <option name="useColors">1</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="unit">%</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20DownstreamStatus%3E%3D400&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Unique Clients</title>
+      <single>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats dc(ClientAddr) as unique_clients</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">IP Addresses</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- TRAFFIC TRENDS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>HTTP Traffic Volume Over Time</title>
+      <chart>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| timechart span=5m count as requests</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Requests</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Response Time Distribution</title>
+      <chart>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| timechart span=5m avg(Duration) as avg_response, p95(Duration) as p95_response, max(Duration) as max_response</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Response Time (ms)</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.legend.labels">["Average","95th Percentile","Maximum"]</option>
+        <option name="charting.seriesColors">[0x53a051,0xf8be34,0xdc4e41]</option>
+        <option name="charting.chart.showMarkers">true</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- STATUS CODE ANALYSIS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>HTTP Status Code Distribution</title>
+      <chart>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval status_category=case(
+    DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "2xx Success",
+    DownstreamStatus&gt;=300 AND DownstreamStatus&lt;400, "3xx Redirect",
+    DownstreamStatus&gt;=400 AND DownstreamStatus&lt;500, "4xx Client Error",
+    DownstreamStatus&gt;=500, "5xx Server Error",
+    1=1, "Other"
+)
+| stats count by status_category
+| sort -count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="charting.fieldColors">{"2xx Success":"#53a051","3xx Redirect":"#6DB7C6","4xx Client Error":"#f1813f","5xx Server Error":"#dc4e41","Other":"#6c757d"}</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Status Code Timeline</title>
+      <chart>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval status_category=case(
+    DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "2xx",
+    DownstreamStatus&gt;=300 AND DownstreamStatus&lt;400, "3xx",
+    DownstreamStatus&gt;=400 AND DownstreamStatus&lt;500, "4xx",
+    DownstreamStatus&gt;=500, "5xx",
+    1=1, "Other"
+)
+| timechart span=10m count by status_category</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Requests</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.fieldColors">{"2xx":"#53a051","3xx":"#6DB7C6","4xx":"#f1813f","5xx":"#dc4e41","Other":"#6c757d"}</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- TOP ENDPOINTS AND CLIENTS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Top 15 Requested Paths</title>
+      <table>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count as requests, avg(Duration) as avg_duration, dc(ClientAddr) as unique_clients by RequestPath
+| eval avg_duration=round(avg_duration, 0)
+| sort -requests
+| head 15
+| rename RequestPath as "Path", requests as "Requests", avg_duration as "Avg Response (ms)", unique_clients as "Unique Clients"</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <format type="color" field="Avg Response (ms)">
+          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="500" maxValue="2000"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20RequestPath%3D%22$row.Path$%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- CLIENT ANALYSIS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Top Client IPs by Request Volume</title>
+      <chart>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count as requests by ClientAddr
+| sort -requests
+| head 10</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Requests</option>
+        <option name="charting.axisTitleY.text">Client IP</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20ClientAddr%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>HTTP Method Distribution</title>
+      <chart>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count by RequestMethod
+| sort -count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="charting.seriesColors">[0x6DB7C6,0x53a051,0xf8be34,0xAC8EC1,0xCE5BA3,0xB86248]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20RequestMethod%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- ERROR ANALYSIS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Recent Errors (4xx/5xx) - Last 50 Events</title>
+      <table>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus&gt;=400 RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval error_type=case(
+    DownstreamStatus&gt;=500, " Server Error",
+    DownstreamStatus&gt;=400, " Client Error",
+    1=1, "Other"
+)
+| table _time, error_type, DownstreamStatus, RequestMethod, RequestPath, ClientAddr, Duration
+| rename _time as "Time", error_type as "Type", DownstreamStatus as "Status", RequestMethod as "Method", RequestPath as "Path", ClientAddr as "Client IP", Duration as "Duration (ms)"
+| head 50</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Type">
+          <colorPalette type="map">{" Server Error":#dc4e41," Client Error":#f1813f}</colorPalette>
+        </format>
+        <format type="color" field="Status">
+          <colorPalette type="minMidMax" minColor="#f1813f" midColor="#f1813f" maxColor="#dc4e41"></colorPalette>
+          <scale type="minMidMax" minValue="400" midValue="450" maxValue="500"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20RequestPath%3D%22$row.Path$%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- PERFORMANCE HEATMAP ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Response Time Heatmap by Path (Slowest Endpoints)</title>
+      <table>
+        <search>
+          <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count as requests, avg(Duration) as avg_duration, p50(Duration) as p50, p95(Duration) as p95, max(Duration) as max_duration by RequestPath
+| eval avg_duration=round(avg_duration, 0), p50=round(p50, 0), p95=round(p95, 0), max_duration=round(max_duration, 0)
+| sort -avg_duration
+| head 15
+| rename RequestPath as "Path", requests as "Requests", avg_duration as "Avg (ms)", p50 as "P50 (ms)", p95 as "P95 (ms)", max_duration as "Max (ms)"</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Avg (ms)">
+          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="500" maxValue="2000"></scale>
+        </format>
+        <format type="color" field="P95 (ms)">
+          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="1000" maxValue="3000"></scale>
+        </format>
+        <format type="color" field="Max (ms)">
+          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="2000" maxValue="5000"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20RequestPath%3D%22$row.Path$%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+</form>
+

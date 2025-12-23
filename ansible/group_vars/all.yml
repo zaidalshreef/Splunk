@@ -1,0 +1,101 @@
+# =============================================================================
+# Splunk Home Lab - Global Variables
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Splunk Configuration
+# -----------------------------------------------------------------------------
+splunk_version: "9.2.0"
+splunk_build: "1fff88043d5f"
+splunk_admin_password: "SplunkAdmin@2025"
+
+# Splunk Enterprise (Indexer)
+splunk_indexer_ip: "10.10.10.114"
+splunk_indexer_port: 9997
+splunk_mgmt_port: 8089
+splunk_web_port: 8000
+splunk_hec_port: 8088
+
+# Splunk Docker Images
+splunk_enterprise_image: "splunk/splunk:latest"
+splunk_forwarder_image: "splunk/universalforwarder:latest"
+
+# -----------------------------------------------------------------------------
+# Forwarder Configuration
+# -----------------------------------------------------------------------------
+splunk_forwarder_inputs:
+  # System Logs
+  - path: /var/log/syslog
+    sourcetype: syslog
+    index: linux
+  - path: /var/log/auth.log
+    sourcetype: linux_secure
+    index: security
+  - path: /var/log/kern.log
+    sourcetype: linux_secure
+    index: linux
+    
+  # Docker Metrics (custom collector)
+  - path: /var/log/docker-metrics.log
+    sourcetype: docker:metrics
+    index: docker
+    
+  # Docker Container Logs
+  - path: /var/lib/docker/containers/*/*-json.log
+    sourcetype: docker:container:json
+    index: docker
+    
+  # Traefik Proxy Logs
+  - path: /etc/dokploy/traefik/dynamic/access.log
+    sourcetype: traefik:access
+    index: traefik
+    
+  # Dokploy Application Logs
+  - path: /etc/dokploy/logs/*/*.log
+    sourcetype: dokploy:app
+    index: application
+    
+  # Linux Audit Logs
+  - path: /var/log/audit/audit.log
+    sourcetype: linux_audit
+    index: security
+
+# -----------------------------------------------------------------------------
+# Docker Swarm Configuration
+# -----------------------------------------------------------------------------
+docker_network: "splunk-net"
+docker_metrics_interval: 60  # seconds
+
+# -----------------------------------------------------------------------------
+# Monitoring Packages to Install
+# -----------------------------------------------------------------------------
+monitoring_packages:
+  - net-tools
+  - iputils-ping
+  - curl
+  - jq
+  - rsyslog
+  - auditd
+  - audispd-plugins
+  - sysstat
+  - htop
+  - iotop
+
+# -----------------------------------------------------------------------------
+# Audit Rules
+# -----------------------------------------------------------------------------
+audit_rules:
+  # Monitor command execution
+  - "-a always,exit -F arch=b64 -S execve -k exec"
+  # Monitor file changes in /etc
+  - "-w /etc/ -p wa -k etc_changes"
+  # Monitor user/group changes
+  - "-w /etc/passwd -p wa -k identity"
+  - "-w /etc/group -p wa -k identity"
+  - "-w /etc/shadow -p wa -k identity"
+  # Monitor sudo usage
+  - "-w /var/log/sudo.log -p wa -k sudo_log"
+  - "-w /etc/sudoers -p wa -k sudoers"
+  # Monitor SSH
+  - "-w /etc/ssh/sshd_config -p wa -k sshd_config"
+

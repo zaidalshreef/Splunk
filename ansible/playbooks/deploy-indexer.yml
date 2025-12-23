@@ -1,0 +1,129 @@
+---
+# =============================================================================
+# Deploy Splunk Enterprise Indexer
+# =============================================================================
+# Usage: ansible-playbook -i inventory/hosts.yml playbooks/deploy-indexer.yml
+# =============================================================================
+
+- name: Deploy Splunk Enterprise Indexer
+  hosts: splunk_indexer
+  become: true
+  
+  vars:
+    indexer_container_name: "splunk-enterprise"
+    splunk_indexes:
+      - linux
+      - security
+      - docker
+      - traefik
+      - application
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Pre-requisites
+    # -------------------------------------------------------------------------
+    - name: Ensure Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Stop existing indexer container
+      docker_container:
+        name: "{{ indexer_container_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove old indexer volumes
+      docker_volume:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - splunk-etc
+        - splunk-var
+      ignore_errors: yes
+
+    # -------------------------------------------------------------------------
+    # Deploy Splunk Enterprise
+    # -------------------------------------------------------------------------
+    - name: Pull Splunk Enterprise image
+      docker_image:
+        name: "{{ splunk_enterprise_image }}"
+        source: pull
+
+    - name: Deploy Splunk Enterprise container
+      docker_container:
+        name: "{{ indexer_container_name }}"
+        image: "{{ splunk_enterprise_image }}"
+        state: started
+        restart_policy: unless-stopped
+        hostname: splunk-indexer
+        network_mode: host
+        env:
+          SPLUNK_START_ARGS: "--accept-license"
+          SPLUNK_PASSWORD: "{{ splunk_admin_password }}"
+          SPLUNK_ENABLE_LISTEN: "{{ splunk_indexer_port }}"
+        volumes:
+          - splunk-etc:/opt/splunk/etc
+          - splunk-var:/opt/splunk/var
+          - /var/log/audit/audit.log:/var/log/audit/audit.log:ro
+
+    - name: Wait for Splunk to be healthy
+      command: docker inspect --format='{{ "{{" }}.State.Health.Status{{ "}}" }}' {{ indexer_container_name }}
+      register: health_status
+      until: health_status.stdout == "healthy"
+      retries: 30
+      delay: 10
+
+    # -------------------------------------------------------------------------
+    # Configure Splunk
+    # -------------------------------------------------------------------------
+    - name: Disable KV Store (CPU incompatible)
+      copy:
+        content: |
+          [kvstore]
+          disabled = true
+        dest: /tmp/server.conf
+      
+    - name: Copy server.conf to container
+      command: docker cp /tmp/server.conf {{ indexer_container_name }}:/opt/splunk/etc/system/local/server.conf
+
+    - name: Fix server.conf permissions
+      command: docker exec {{ indexer_container_name }} chown splunk:splunk /opt/splunk/etc/system/local/server.conf
+
+    - name: Create custom indexes
+      command: >
+        docker exec -u splunk {{ indexer_container_name }}
+        /opt/splunk/bin/splunk add index {{ item }}
+        -auth admin:{{ splunk_admin_password }}
+      loop: "{{ splunk_indexes }}"
+      register: index_result
+      failed_when: false
+      changed_when: "'Index' in index_result.stdout"
+
+    - name: Restart Splunk to apply changes
+      command: docker exec -u splunk {{ indexer_container_name }} /opt/splunk/bin/splunk restart
+
+    - name: Wait for Splunk to restart
+      pause:
+        seconds: 60
+
+    - name: Verify Splunk health
+      command: docker inspect --format='{{ "{{" }}.State.Health.Status{{ "}}" }}' {{ indexer_container_name }}
+      register: final_health
+      failed_when: final_health.stdout != "healthy"
+
+    - name: Display access information
+      debug:
+        msg: |
+          =====================================================
+          Splunk Enterprise Deployed Successfully!
+          =====================================================
+          Web UI: http://{{ splunk_indexer_ip }}:{{ splunk_web_port }}
+          Username: admin
+          Password: {{ splunk_admin_password }}
+          
+          Receiving Port: {{ splunk_indexer_port }}
+          HEC Port: {{ splunk_hec_port }}
+          =====================================================
+
