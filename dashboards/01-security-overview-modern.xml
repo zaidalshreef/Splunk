@@ -46,6 +46,13 @@
       <single>
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval severity=case(
+    match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
+    match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
+    1=1, "low"
+)
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | eventstats count as total_events
 | search "failed" OR "invalid" OR "denied" OR "error"
 | eventstats count as failed_events
@@ -73,6 +80,8 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "authentication failure" OR "Invalid user")
+| eval severity="high"
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -95,6 +104,8 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog) ("Accepted password" OR "Accepted publickey" OR "session opened")
+| eval severity="low"
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -115,6 +126,8 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog) "sudo"
+| eval severity="medium"
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -134,6 +147,13 @@
       <single>
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval severity=case(
+    match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
+    match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
+    1=1, "low"
+)
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
 | where isnotnull(src_ip) AND src_ip!="127.0.0.1"
 | stats dc(src_ip) as unique_ips</query>
@@ -159,6 +179,13 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog)
+| eval severity=case(
+    match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
+    match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
+    1=1, "low"
+)
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | eval auth_status=case(
     match(_raw, "(?i)(failed|invalid|authentication failure)"), "Failed",
     match(_raw, "(?i)(accepted|session opened)"), "Success",
@@ -195,13 +222,15 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+| eval severity="critical"
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
 | rex field=_raw "(?i)(failed password|invalid user)\s+for\s+(invalid user\s+)?(?&lt;user&gt;\S+)"
 | bucket _time span=5m
 | stats count as attempts, values(user) as targeted_users by _time, src_ip, host
 | where attempts &gt;= 5
 | sort -attempts
-| eval threat_level=case(attempts&gt;=20," Critical", attempts&gt;=10," High", attempts&gt;=5,"🟡 Medium")
+| eval threat_level=case(attempts&gt;=20,"Critical", attempts&gt;=10,"High", attempts&gt;=5,"Medium")
 | table _time, src_ip, host, attempts, targeted_users, threat_level
 | rename _time as "Time", src_ip as "Source IP", host as "Target Host", attempts as "Attempts", targeted_users as "Targeted Users", threat_level as "Threat Level"</query>
           <earliest>$time.earliest$</earliest>
@@ -215,7 +244,7 @@
         <option name="wrap">true</option>
         <option name="rowNumbers">true</option>
         <format type="color" field="Threat Level">
-          <colorPalette type="map">{" Critical":#dc4e41," High":#f1813f,"🟡 Medium":#f8be34}</colorPalette>
+          <colorPalette type="map">{"Critical":#dc4e41,"High":#f1813f,"Medium":#f8be34}</colorPalette>
         </format>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dsecurity%20src_ip%3D$row.Source IP$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -234,6 +263,8 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+| eval severity="high"
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
 | stats count as failures by src_ip
 | sort -failures
@@ -260,6 +291,8 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+| eval severity="high"
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "(?i)(failed password|invalid user)\s+for\s+(invalid user\s+)?(?&lt;user&gt;\S+)"
 | stats count as attempts by user
 | sort -attempts
@@ -289,6 +322,8 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog) "sudo"
+| eval severity="medium"
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "sudo:\s+(?&lt;user&gt;\S+)\s+:\s+TTY=(?&lt;tty&gt;\S+)\s+;\s+PWD=(?&lt;pwd&gt;\S+)\s+;\s+USER=(?&lt;target_user&gt;\S+)\s+;\s+COMMAND=(?&lt;command&gt;.*)"
 | table _time, host, user, target_user, command
 | rename _time as "Time", host as "Host", user as "User", target_user as "As User", command as "Command"
@@ -319,6 +354,13 @@
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 (sourcetype=linux_secure OR sourcetype=syslog)
+| eval severity=case(
+    match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
+    match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
+    1=1, "low"
+)
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | timechart span=10m count by host limit=10</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -341,6 +383,13 @@
       <chart>
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval severity=case(
+    match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
+    match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
+    1=1, "low"
+)
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count by sourcetype
 | sort -count</query>
           <earliest>$time.earliest$</earliest>
@@ -367,6 +416,13 @@
       <event>
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval severity=case(
+    match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
+    match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
+    1=1, "low"
+)
+| where severity="$severity_filter$" OR "$severity_filter$"="*"
 | head 100</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>

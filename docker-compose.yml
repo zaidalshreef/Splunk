@@ -1,0 +1,56 @@
+# =============================================================================
+# Splunk Enterprise - Docker Compose
+# =============================================================================
+# Fresh setup with HEC (HTTP Event Collector) enabled for Docker logs
+# Run: docker-compose up -d
+# =============================================================================
+
+services:
+  splunk:
+    image: splunk/splunk:latest
+    container_name: splunk-enterprise
+    hostname: splunk
+    restart: unless-stopped
+    ports:
+      # Web UI
+      - "8000:8000"
+      # Splunk Forwarder receiving port
+      - "9997:9997"
+      # HTTP Event Collector (HEC)
+      - "8088:8088"
+      # Management port
+      - "8089:8089"
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=SplunkAdmin123!
+      - SPLUNK_HEC_TOKEN=a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      - SPLUNK_APPS_URL=
+    volumes:
+      # Persistent data
+      - splunk-etc:/opt/splunk/etc
+      - splunk-var:/opt/splunk/var
+      # Configuration files (mounted read-only)
+      - ./config/splunk-inputs.conf:/opt/splunk/etc/system/local/inputs.conf:ro
+      - ./config/splunk-props.conf:/opt/splunk/etc/system/local/props.conf:ro
+      - ./config/splunk-transforms.conf:/opt/splunk/etc/system/local/transforms.conf:ro
+      # Dashboards
+      - ./dashboards:/opt/splunk/etc/apps/search/local/data/ui/views:ro
+    networks:
+      - splunk-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  splunk-etc:
+    name: splunk-etc-fresh
+  splunk-var:
+    name: splunk-var-fresh
+
+networks:
+  splunk-net:
+    driver: bridge
+

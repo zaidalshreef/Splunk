@@ -1,7 +1,7 @@
 <form version="1.1" theme="dark">
   <label> Traefik Proxy Command Center</label>
   <description>HTTP Traffic Analysis, Response Times, Error Rates, and Client Analytics</description>
-  
+
   <!-- ============================================== -->
   <!-- GLOBAL SETTINGS -->
   <!-- ============================================== -->
@@ -86,12 +86,10 @@
       <single>
         <search>
           <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval status_category=case(
-    DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "success",
-    1=1, "error"
+| eval status_category=case( DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "success", 1=1, "error"
 )
 | stats count(eval(status_category="success")) as success_count, count as total
-| eval success_rate=round((success_count/total)*100, 1)</query>
+| eval success_rate=if(total>0, round((success_count/total)*100, 1), 100)</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
@@ -111,13 +109,10 @@
       <single>
         <search>
           <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval status_category=case(
-    DownstreamStatus&gt;=500, "5xx",
-    DownstreamStatus&gt;=400, "4xx",
-    1=1, "ok"
+| eval status_category=case( DownstreamStatus&gt;=500, "5xx", DownstreamStatus&gt;=400, "4xx", 1=1, "ok"
 )
 | stats count(eval(status_category="5xx" OR status_category="4xx")) as error_count, count as total
-| eval error_rate=round((error_count/total)*100, 1)</query>
+| eval error_rate=if(total>0, round((error_count/total)*100, 1), 0)</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
@@ -215,12 +210,7 @@
       <chart>
         <search>
           <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval status_category=case(
-    DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "2xx Success",
-    DownstreamStatus&gt;=300 AND DownstreamStatus&lt;400, "3xx Redirect",
-    DownstreamStatus&gt;=400 AND DownstreamStatus&lt;500, "4xx Client Error",
-    DownstreamStatus&gt;=500, "5xx Server Error",
-    1=1, "Other"
+| eval status_category=case( DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "2xx Success", DownstreamStatus&gt;=300 AND DownstreamStatus&lt;400, "3xx Redirect", DownstreamStatus&gt;=400 AND DownstreamStatus&lt;500, "4xx Client Error", DownstreamStatus&gt;=500, "5xx Server Error", 1=1, "Other"
 )
 | stats count by status_category
 | sort -count</query>
@@ -243,12 +233,7 @@
       <chart>
         <search>
           <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval status_category=case(
-    DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "2xx",
-    DownstreamStatus&gt;=300 AND DownstreamStatus&lt;400, "3xx",
-    DownstreamStatus&gt;=400 AND DownstreamStatus&lt;500, "4xx",
-    DownstreamStatus&gt;=500, "5xx",
-    1=1, "Other"
+| eval status_category=case( DownstreamStatus&gt;=200 AND DownstreamStatus&lt;300, "2xx", DownstreamStatus&gt;=300 AND DownstreamStatus&lt;400, "3xx", DownstreamStatus&gt;=400 AND DownstreamStatus&lt;500, "4xx", DownstreamStatus&gt;=500, "5xx", 1=1, "Other"
 )
 | timechart span=10m count by status_category</query>
           <earliest>$time.earliest$</earliest>
@@ -365,10 +350,7 @@
       <table>
         <search>
           <query>index=traefik sourcetype="traefik:access" DownstreamStatus&gt;=400 RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval error_type=case(
-    DownstreamStatus&gt;=500, " Server Error",
-    DownstreamStatus&gt;=400, " Client Error",
-    1=1, "Other"
+| eval error_type=case( DownstreamStatus&gt;=500, " Server Error", DownstreamStatus&gt;=400, " Client Error", 1=1, "Other"
 )
 | table _time, error_type, DownstreamStatus, RequestMethod, RequestPath, ClientAddr, Duration
 | rename _time as "Time", error_type as "Type", DownstreamStatus as "Status", RequestMethod as "Method", RequestPath as "Path", ClientAddr as "Client IP", Duration as "Duration (ms)"

@@ -21,9 +21,9 @@
       <fieldForLabel>host</fieldForLabel>
       <fieldForValue>host</fieldForValue>
       <search>
-        <query>index=docker sourcetype="docker:container:json" | stats count by host</query>
-        <earliest>$time.earliest$</earliest>
-        <latest>$time.latest$</latest>
+        <query>index=docker sourcetype="docker:container:json" earliest=-24h | stats count by host | sort -count</query>
+        <earliest>-24h</earliest>
+        <latest>now</latest>
       </search>
     </input>
     <input type="dropdown" token="container_filter" searchWhenChanged="true">
@@ -32,12 +32,16 @@
       <default>*</default>
       <initialValue>*</initialValue>
       <fieldForLabel>container_name</fieldForLabel>
-      <fieldForValue>container_name</fieldForValue>
+      <fieldForValue>container_short_id</fieldForValue>
       <search>
-        <query>index=docker sourcetype="docker:container:json" container_name=* 
-| stats count by container_name</query>
-        <earliest>$time.earliest$</earliest>
-        <latest>$time.latest$</latest>
+        <query>index=docker sourcetype="docker:container:json" earliest=-24h
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
+| stats count by container_short_id, container_name
+| sort -count</query>
+        <earliest>-24h</earliest>
+        <latest>now</latest>
       </search>
     </input>
     <input type="dropdown" token="stream_filter" searchWhenChanged="true">
@@ -70,8 +74,9 @@
       <title> Total Log Events</title>
       <single>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ log_message=$search_text$ earliest=$time.earliest$ latest=$time.latest$
-| search log_message=$level_filter$
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | stats count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -91,8 +96,10 @@
       <title> Error Count</title>
       <single>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
-| search log_message="*ERROR*" OR log_message="*error*" OR log_message="*Exception*" OR log_message="*FATAL*" OR stream="stderr"
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| where container_short_id="$container_filter$" OR "$container_filter$"="*"
+| search (ERROR OR error OR Exception OR FATAL OR stream="stderr")
 | stats count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -114,8 +121,10 @@
       <title> Warning Count</title>
       <single>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
-| search log_message="*WARN*" OR log_message="*warn*" OR log_message="*Warning*"
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| where container_short_id="$container_filter$" OR "$container_filter$"="*"
+| search (WARN OR warn OR Warning)
 | stats count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -138,7 +147,8 @@
       <single>
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
-| stats dc(container_name) as unique_containers</query>
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| stats dc(container_short_id) as unique_containers</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
@@ -154,11 +164,11 @@
       <title> Logs Per Second</title>
       <single>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | stats count as total_logs
-| eval time_range=relative_time(now(), "$time.earliest$")
-| eval duration_seconds=now()-time_range
-| eval lps=round(total_logs/duration_seconds, 2)</query>
+| eval lps=if(total_logs&gt;0, round(total_logs/300, 2), 0)</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
@@ -181,8 +191,10 @@
       <title>Log Volume Over Time</title>
       <chart>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
-| timechart span=30s count</query>
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| where container_short_id="$container_filter$" OR "$container_filter$"="*"
+| timechart span=1m count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
@@ -204,10 +216,12 @@
       <title>Error &amp; Warning Timeline</title>
       <chart>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | eval log_level=case(
-    match(log_message, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", "Error",
-    match(log_message, "(?i)(WARN|warn|Warning)"), "Warning",
+    match(_raw, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", "Error",
+    match(_raw, "(?i)(WARN|warn|Warning)"), "Warning",
     1=1, "Other"
 )
 | search log_level!="Other"
@@ -240,7 +254,9 @@
       <chart>
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
+| rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_display=coalesce(container_name, container_short_id)
 | eval container_display=if(len(container_display)&gt;40, substr(container_display,1,37)."...", container_display)
 | stats count as log_events by container_display
 | sort -log_events
@@ -271,9 +287,14 @@
       <title>Containers with Most Errors</title>
       <table>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
-| search log_message="*ERROR*" OR log_message="*error*" OR log_message="*Exception*" OR log_message="*FATAL*" OR stream="stderr"
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "/var/lib/docker/containers/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| spath input=_raw path=stream output=stream_type
+| spath input=_raw path=log output=log_msg
+| search stream_type=*
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_display=coalesce(container_name, container_short_id)
+| where match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr"
 | stats count as error_count by container_display, host
 | sort -error_count
 | head 15
@@ -313,8 +334,10 @@
       <title>Log Stream Distribution (stdout vs stderr)</title>
       <chart>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval stream_display=if(stream="stdout", "stdout (Normal)", "stderr (Errors)")
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| spath input=_raw path=stream output=stream_type
+| search stream_type=*
+| eval stream_display=case(stream_type="stdout", "stdout (Normal)", stream_type="stderr", "stderr (Errors)", 1=1, "Unknown")
 | stats count by stream_display</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -334,12 +357,15 @@
       <title>Log Level Distribution</title>
       <chart>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| spath input=_raw path=stream output=stream_type
+| spath input=_raw path=log output=log_msg
+| search stream_type=*
 | eval log_level=case(
-    match(log_message, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", "ERROR",
-    match(log_message, "(?i)(WARN|warn|Warning)"), "WARN",
-    match(log_message, "(?i)(INFO|info)"), "INFO",
-    match(log_message, "(?i)(DEBUG|debug)"), "DEBUG",
+    match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr", "ERROR",
+    match(log_msg, "(?i)(WARN|Warning)"), "WARN",
+    match(log_msg, "(?i)INFO"), "INFO",
+    match(log_msg, "(?i)DEBUG"), "DEBUG",
     1=1, "OTHER"
 )
 | stats count by log_level
@@ -368,12 +394,17 @@
       <title>Recent Errors &amp; Exceptions (Last 50)</title>
       <table>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
-| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
-| search log_message="*ERROR*" OR log_message="*error*" OR log_message="*Exception*" OR log_message="*FATAL*" OR stream="stderr"
-| eval log_message_short=if(len(log_message)&gt;150, substr(log_message,1,147)."...", log_message)
-| table _time, container_display, host, stream, log_message_short
-| rename _time as "Time", container_display as "Container", host as "Host", stream as "Stream", log_message_short as "Error Message"
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "/var/lib/docker/containers/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| spath input=_raw path=stream output=stream_type
+| spath input=_raw path=log output=log_msg
+| search stream_type=*
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_display=coalesce(container_name, container_short_id)
+| where match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr"
+| eval log_msg_short=if(len(log_msg)&gt;150, substr(log_msg,1,147)."...", log_msg)
+| table _time, container_display, host, stream_type, log_msg_short
+| rename _time as "Time", container_display as "Container", host as "Host", stream_type as "Stream", log_msg_short as "Error Message"
 | head 50</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -402,19 +433,23 @@
       <title>Live Container Log Feed (Real-Time)</title>
       <table>
         <search>
-          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ container_name=$container_filter$ stream=$stream_filter$ log_message=$search_text$ earliest=$time.earliest$ latest=$time.latest$
-| eval container_display=if(isnull(container_name) OR container_name="", container_short_id, container_name)
+          <query>index=docker sourcetype="docker:container:json" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=source "/var/lib/docker/containers/(?&lt;container_short_id&gt;[a-f0-9]{12})"
+| spath input=_raw path=stream output=stream_type
+| spath input=_raw path=log output=log_msg
+| search stream_type=*
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_display=coalesce(container_name, container_short_id)
 | eval log_level=case(
-    match(log_message, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", " ERROR",
-    match(log_message, "(?i)(WARN|warn|Warning)"), "🟡 WARN",
-    match(log_message, "(?i)(INFO|info)"), " INFO",
-    match(log_message, "(?i)(DEBUG|debug)"), " DEBUG",
-    1=1, " OTHER"
+    match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr", "ERROR",
+    match(log_msg, "(?i)(WARN|Warning)"), "WARN",
+    match(log_msg, "(?i)INFO"), "INFO",
+    match(log_msg, "(?i)DEBUG"), "DEBUG",
+    1=1, "OTHER"
 )
-| search log_level=$level_filter$
-| eval log_message_display=if(len(log_message)&gt;200, substr(log_message,1,197)."...", log_message)
-| table _time, log_level, container_display, host, log_message_display
-| rename _time as "Time", log_level as "Level", container_display as "Container", host as "Host", log_message_display as "Log Message"
+| eval log_msg_display=if(len(log_msg)&gt;200, substr(log_msg,1,197)."...", log_msg)
+| table _time, log_level, container_display, host, log_msg_display
+| rename _time as "Time", log_level as "Level", container_display as "Container", host as "Host", log_msg_display as "Log Message"
 | head 100</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>

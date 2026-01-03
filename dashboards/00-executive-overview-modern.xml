@@ -45,7 +45,7 @@ index=* host=$host_token$ earliest=-5m
 | appendcols [ search index=* host=$host_token$ earliest=-5m (ERROR OR CRITICAL OR error OR critical) | stats count as errors ]
 | appendcols [ search index=docker sourcetype=docker:metrics event_type=docker_container earliest=-5m | stats dc(container_name) as containers ]
 | fillnull value=0 
-| eval error_rate=round((errors/total_events)*100, 2)
+| eval error_rate=if(total_events>0, round((errors/total_events)*100, 2), 0)
 | eval health_score=case(
     error_rate&lt;1 AND containers&gt;10 AND hosts>=5, 98,
     error_rate&lt;5 AND containers&gt;5 AND hosts>=4, 85,
@@ -106,7 +106,7 @@ index=$index_token$ host=$host_token$ earliest=-1m latest=now
         <option name="unit">eps</option>
         <option name="useColors">1</option>
         <drilldown>
-          <link target="_blank">06-performance</link>
+          <link target="_blank">04-network-security-modern</link>
         </drilldown>
       </single>
     </panel>
@@ -140,7 +140,7 @@ index=security earliest=-1h
         <option name="unit">pts</option>
         <option name="useColors">1</option>
         <drilldown>
-          <link target="_blank">01-security-overview</link>
+          <link target="_blank">01-security-overview-modern</link>
         </drilldown>
       </single>
     </panel>
@@ -152,7 +152,7 @@ index=security earliest=-1h
           <query>
 index=docker sourcetype=docker:metrics event_type=docker_container host=$host_token$ earliest=-5m 
 | stats dc(container_name) as running_containers count(eval(health="healthy")) as healthy_count count(eval(status="running")) as active_count
-| eval health_percentage=round((healthy_count/running_containers)*100, 0)
+| eval health_percentage=if(running_containers>0, round((healthy_count/running_containers)*100, 0), 0)
 | eval container_status=case(
     health_percentage>=95, "Optimal",
     health_percentage>=80, "Healthy",
@@ -172,7 +172,7 @@ index=docker sourcetype=docker:metrics event_type=docker_container host=$host_to
         <option name="underLabel">Active Containers • Swarm Health</option>
         <option name="useColors">1</option>
         <drilldown>
-          <link target="_blank">02-docker-swarm</link>
+          <link target="_blank">02-docker-swarm-modern</link>
         </drilldown>
       </single>
     </panel>

@@ -1,0 +1,14 @@
+{
+  "log-driver": "splunk",
+  "log-opts": {
+    "splunk-token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "splunk-url": "https://10.10.10.114:8088",
+    "splunk-index": "docker",
+    "splunk-sourcetype": "docker:container",
+    "splunk-format": "json",
+    "splunk-verify-connection": "false",
+    "splunk-gzip": "true",
+    "tag": "{{.Name}}/{{.ID}}"
+  }
+}
+

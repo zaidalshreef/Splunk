@@ -1,0 +1,494 @@
+<dashboard version="1.1" theme="dark">
+  <label>Network Security Command Center</label>
+  <description>Open Ports - Firewall Rules - Network Connections - Traffic Analysis</description>
+
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="host_filter" searchWhenChanged="true">
+      <label>Host</label>
+      <choice value="*">All Hosts</choice>
+      <default>*</default>
+      <search>
+        <query>index=network sourcetype="network:security" earliest=-24h | dedup host | table host</query>
+      </search>
+      <fieldForLabel>host</fieldForLabel>
+      <fieldForValue>host</fieldForValue>
+    </input>
+  </fieldset>
+
+  <!-- ==================== KEY METRICS ROW ==================== -->
+  <row>
+    <panel>
+      <title>LISTENING PORTS</title>
+      <single>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="connection_stats" host=$host_filter$ earliest=-5m
+| stats latest(listening) as listening
+| fillnull value=0
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[30,50]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Active TCP Listeners</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ESTABLISHED CONNECTIONS</title>
+      <single>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="connection_stats" host=$host_filter$ earliest=-5m
+| stats latest(established) as established
+| fillnull value=0
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[100,500]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Active Sessions</option>
+      </single>
+    </panel>
+    <panel>
+      <title>FIREWALL RULES</title>
+      <single>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="iptables_chain" host=$host_filter$ earliest=-5m
+| stats sum(rule_count) as total_rules
+| fillnull value=0
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x3b82f6","0x3b82f6","0x3b82f6"]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">iptables Rules Active</option>
+      </single>
+    </panel>
+    <panel>
+      <title>POTENTIAL SCANS</title>
+      <single>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="potential_scan" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats dc(source_ip) as scan_sources
+| fillnull value=0
+          </query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[1,5]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Suspicious Sources Detected</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ==================== OPEN PORTS ROW ==================== -->
+  <row>
+    <panel>
+      <title>OPEN PORTS BY HOST</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="open_port" host=$host_filter$ earliest=-5m
+| dedup host port protocol
+| stats values(process) as Process, values(bind_address) as "Bind Address" by host port protocol
+| sort host port
+| rename host as "Host", port as "Port", protocol as "Protocol"
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">20</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Port">
+          <colorPalette type="map">{"22":#f59e0b,"80":#10b981,"443":#10b981,"3306":#dc2626,"5432":#dc2626,"6379":#dc2626,"27017":#dc2626}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>PORT DISTRIBUTION</title>
+      <chart>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="open_port" host=$host_filter$ earliest=-5m
+| dedup host port
+| eval port_category=case(
+    port=22, "SSH (22)",
+    port=80, "HTTP (80)",
+    port=443, "HTTPS (443)",
+    port=8000, "Splunk Web (8000)",
+    port=9997, "Splunk Fwd (9997)",
+    port=8088, "Splunk HEC (8088)",
+    port=2377, "Swarm Mgmt (2377)",
+    port=7946, "Swarm Net (7946)",
+    port=4789, "Swarm Overlay (4789)",
+    port&lt;1024, "System (&lt;1024)",
+    1=1, "Application (&gt;1024)"
+)
+| stats count by port_category
+| sort -count
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="charting.seriesColors">[0x10b981,0x3b82f6,0x8b5cf6,0xec4899,0xf59e0b,0x06b6d4]</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ==================== IPTABLES RULES ROW ==================== -->
+  <row>
+    <panel>
+      <title>IPTABLES CHAIN POLICIES</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="iptables_chain" host=$host_filter$ earliest=-5m
+| dedup host chain
+| eval status=case(
+    policy="ACCEPT", "ACCEPT",
+    policy="DROP", "DROP",
+    policy="REJECT", "REJECT",
+    1=1, policy
+)
+| table host chain policy rule_count
+| rename host as "Host", chain as "Chain", policy as "Policy", rule_count as "Rules"
+| sort host chain
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">20</option>
+        <format type="color" field="Policy">
+          <colorPalette type="map">{"ACCEPT":#10b981,"DROP":#dc2626,"REJECT":#f59e0b}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>IPTABLES RULES DETAIL</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="iptables_rule" host=$host_filter$ earliest=-5m
+| dedup host target source destination
+| table host chain target protocol source destination options packets bytes
+| rename host as "Host", chain as "Chain", target as "Action", protocol as "Proto", source as "Source", destination as "Dest", options as "Options", packets as "Packets", bytes as "Bytes"
+| sort host -packets
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">15</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Action">
+          <colorPalette type="map">{"ACCEPT":#10b981,"DROP":#dc2626,"REJECT":#f59e0b,"LOG":#3b82f6}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ==================== NETWORK CONNECTIONS ROW ==================== -->
+  <row>
+    <panel>
+      <title>CONNECTION STATE OVER TIME</title>
+      <chart>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="connection_stats" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| timechart span=5m avg(established) as "Established", avg(time_wait) as "Time Wait", avg(close_wait) as "Close Wait"
+          </query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.seriesColors">[0x10b981,0xf59e0b,0xdc2626]</option>
+        <option name="charting.axisTitleY.text">Connections</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>TOP REMOTE IPs BY CONNECTIONS</title>
+      <chart>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="network_connection" host=$host_filter$ earliest=-5m
+| stats count by remote_ip
+| sort -count
+| head 10
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.seriesColors">[0x3b82f6]</option>
+        <option name="charting.axisTitleX.text">Connections</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ==================== ACTIVE CONNECTIONS ROW ==================== -->
+  <row>
+    <panel>
+      <title>ACTIVE NETWORK CONNECTIONS</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="network_connection" host=$host_filter$ earliest=-5m
+| dedup host local_port remote_ip remote_port
+| eval connection=local_port." -&gt; ".remote_ip.":".remote_port
+| table host state local_port remote_ip remote_port process
+| rename host as "Host", state as "State", local_port as "Local Port", remote_ip as "Remote IP", remote_port as "Remote Port", process as "Process"
+| sort host -state
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">25</option>
+        <option name="wrap">false</option>
+        <format type="color" field="State">
+          <colorPalette type="map">{"ESTAB":#10b981,"ESTABLISHED":#10b981,"TIME-WAIT":#f59e0b,"CLOSE-WAIT":#dc2626,"SYN-SENT":#3b82f6}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ==================== NETWORK INTERFACE STATS ROW ==================== -->
+  <row>
+    <panel>
+      <title>NETWORK INTERFACE TRAFFIC</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="network_interface" host=$host_filter$ earliest=-5m
+| dedup host interface
+| eval rx_mb=round(rx_bytes/1024/1024,2)
+| eval tx_mb=round(tx_bytes/1024/1024,2)
+| table host interface ip_address rx_mb tx_mb rx_packets tx_packets rx_errors tx_errors rx_dropped tx_dropped
+| rename host as "Host", interface as "Interface", ip_address as "IP Address", rx_mb as "RX (MB)", tx_mb as "TX (MB)", rx_packets as "RX Pkts", tx_packets as "TX Pkts", rx_errors as "RX Err", tx_errors as "TX Err", rx_dropped as "RX Drop", tx_dropped as "TX Drop"
+| sort host interface
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">20</option>
+        <format type="color" field="RX Err">
+          <colorPalette type="minMidMax" minColor="#10b981" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="10" maxValue="100"></scale>
+        </format>
+        <format type="color" field="TX Err">
+          <colorPalette type="minMidMax" minColor="#10b981" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="10" maxValue="100"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ==================== UFW FIREWALL ROW ==================== -->
+  <row>
+    <panel>
+      <title>UFW FIREWALL STATUS</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="ufw_status" host=$host_filter$ earliest=-5m
+| dedup host
+| eval status_icon=case(
+    status="active", "ACTIVE",
+    status="inactive", "INACTIVE",
+    1=1, status
+)
+| table host status_icon rule_count
+| rename host as "Host", status_icon as "Status", rule_count as "Rules"
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">10</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"ACTIVE":#10b981,"INACTIVE":#dc2626}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>UFW RULES</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="ufw_rule" host=$host_filter$ earliest=-5m
+| dedup host to action from
+| table host to action from
+| rename host as "Host", to as "To", action as "Action", from as "From"
+| sort host to
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">15</option>
+        <format type="color" field="Action">
+          <colorPalette type="map">{"ALLOW":#10b981,"DENY":#dc2626,"LIMIT":#f59e0b}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ==================== POTENTIAL THREATS ROW ==================== -->
+  <row>
+    <panel>
+      <title>POTENTIAL PORT SCAN SOURCES</title>
+      <table>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="potential_scan" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count as detections, max(connection_count) as max_connections, latest(_time) as last_seen by source_ip host
+| convert ctime(last_seen)
+| eval threat_level=case(
+    max_connections&gt;=50, "CRITICAL",
+    max_connections&gt;=20, "HIGH",
+    max_connections&gt;=10, "MEDIUM",
+    1=1, "LOW"
+)
+| table source_ip host threat_level max_connections detections last_seen
+| rename source_ip as "Source IP", host as "Target Host", threat_level as "Threat Level", max_connections as "Max Connections", detections as "Detections", last_seen as "Last Seen"
+| sort -max_connections
+          </query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">15</option>
+        <format type="color" field="Threat Level">
+          <colorPalette type="map">{"CRITICAL":#dc2626,"HIGH":#f59e0b,"MEDIUM":#eab308,"LOW":#10b981}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>BLOCKED CONNECTIONS (Kernel/Firewall)</title>
+      <single>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="firewall_blocked" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats sum(blocked_count) as total_blocked
+| fillnull value=0
+          </query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[100,1000]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Packets Blocked by Firewall</option>
+        <option name="height">150</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ==================== SERVICES BY PORT ROW ==================== -->
+  <row>
+    <panel>
+      <title>COMMON SERVICES DETECTED</title>
+      <chart>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="open_port" host=$host_filter$ earliest=-5m
+| dedup host port
+| eval service=case(
+    port=22, "SSH",
+    port=80, "HTTP",
+    port=443, "HTTPS",
+    port=21, "FTP",
+    port=23, "Telnet",
+    port=25, "SMTP",
+    port=53, "DNS",
+    port=110, "POP3",
+    port=143, "IMAP",
+    port=3306, "MySQL",
+    port=5432, "PostgreSQL",
+    port=6379, "Redis",
+    port=27017, "MongoDB",
+    port=8080, "HTTP-Alt",
+    port=8000, "Splunk",
+    port=9997, "Splunk-Fwd",
+    port=2377, "Docker-Swarm",
+    1=1, "Other"
+)
+| stats count by service
+| sort -count
+          </query>
+          <earliest>-5m</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="charting.seriesColors">[0x3b82f6,0x10b981,0x8b5cf6,0xec4899,0xf59e0b,0x06b6d4,0x64748b]</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>LISTENING PORTS TREND</title>
+      <chart>
+        <search>
+          <query>
+index=network sourcetype="network:security" event_type="connection_stats" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| timechart span=10m avg(listening) as "Listening Ports"
+          </query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>60s</refresh>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.seriesColors">[0x10b981]</option>
+        <option name="charting.axisTitleY.text">Ports</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+  </row>
+
+</dashboard>
+
