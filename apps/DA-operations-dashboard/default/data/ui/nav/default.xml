@@ -1,0 +1,20 @@
+<nav search_view="search" color="#1a1a2e">
+    <view name="00-executive-overview" default="true"/>
+    <collection label="Infrastructure">
+        <view name="02-docker-swarm"/>
+        <view name="11-infrastructure"/>
+        <view name="12-container-logs"/>
+    </collection>
+    <collection label="Security">
+        <view name="01-security-overview"/>
+        <view name="04-network-security"/>
+        <view name="05-audit-compliance"/>
+    </collection>
+    <collection label="Applications">
+        <view name="03-traefik-proxy"/>
+        <view name="13-bookingapp"/>
+    </collection>
+    <view name="search"/>
+    <view name="dashboards"/>
+</nav>
+

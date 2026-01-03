@@ -2,7 +2,15 @@
 # Splunk Enterprise - Docker Compose
 # =============================================================================
 # Fresh setup with HEC (HTTP Event Collector) enabled for Docker logs
-# Run: docker-compose up -d
+# 
+# Deploy to remote server:
+#   scp docker-compose.yml root@10.10.10.114:/opt/splunk-deploy/
+#   ssh root@10.10.10.114 'cd /opt/splunk-deploy && docker compose up -d'
+#
+# Web UI: http://10.10.10.114:8000
+# Username: admin
+# Password: SplunkAdmin123!
+# HEC Token: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 # =============================================================================
 
 services:
@@ -22,21 +30,13 @@ services:
       - "8089:8089"
     environment:
       - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
       - SPLUNK_PASSWORD=SplunkAdmin123!
       - SPLUNK_HEC_TOKEN=a1b2c3d4-e5f6-7890-abcd-ef1234567890
-      - SPLUNK_APPS_URL=
     volumes:
       # Persistent data
       - splunk-etc:/opt/splunk/etc
       - splunk-var:/opt/splunk/var
-      # Configuration files (mounted read-only)
-      - ./config/splunk-inputs.conf:/opt/splunk/etc/system/local/inputs.conf:ro
-      - ./config/splunk-props.conf:/opt/splunk/etc/system/local/props.conf:ro
-      - ./config/splunk-transforms.conf:/opt/splunk/etc/system/local/transforms.conf:ro
-      # Dashboards
-      - ./dashboards:/opt/splunk/etc/apps/search/local/data/ui/views:ro
-    networks:
-      - splunk-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000"]
       interval: 30s
@@ -46,11 +46,5 @@ services:
 
 volumes:
   splunk-etc:
-    name: splunk-etc-fresh
   splunk-var:
-    name: splunk-var-fresh
-
-networks:
-  splunk-net:
-    driver: bridge
 

@@ -1,0 +1,465 @@
+<form version="1.1" theme="dark">
+    <label>Audit &amp; Compliance Command Center</label>
+    <description>System Auditing, Command Execution Tracking, File Changes, and Compliance Monitoring</description>
+
+    <!-- ============================================== -->
+    <!-- GLOBAL SETTINGS -->
+    <!-- ============================================== -->
+    <fieldset submitButton="true" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>Time Range</label>
+            <default>
+                <earliest>-1h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+        <input type="dropdown" token="host_filter" searchWhenChanged="true">
+            <label>Host</label>
+            <choice value="*">All Hosts</choice>
+            <default>*</default>
+            <initialValue>*</initialValue>
+            <fieldForLabel>host</fieldForLabel>
+            <fieldForValue>host</fieldForValue>
+            <search>
+                <query>index=security sourcetype=linux_audit | stats count by host</query>
+                <earliest>$time.earliest$</earliest>
+                <latest>$time.latest$</latest>
+            </search>
+        </input>
+        <input type="dropdown" token="audit_type_filter" searchWhenChanged="true">
+            <label>Audit Type</label>
+            <choice value="*">All Types</choice>
+            <choice value="EXECVE">EXECVE (Commands)</choice>
+            <choice value="SYSCALL">SYSCALL (System Calls)</choice>
+            <choice value="PATH">PATH (File Access)</choice>
+            <choice value="USER_CMD">USER_CMD (User Commands)</choice>
+            <choice value="CRED_ACQ">CRED_ACQ (Credentials)</choice>
+            <choice value="USER_START">USER_START (Sessions)</choice>
+            <choice value="USER_END">USER_END (Session End)</choice>
+            <default>*</default>
+        </input>
+    </fieldset>
+
+    <!-- ============================================== -->
+    <!-- KEY METRICS ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title> Total Audit Events</title>
+            <single>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ audit_type=$audit_type_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="drilldown">all</option>
+                <option name="underLabel">Audit Records</option>
+                <option name="useColors">0</option>
+                <option name="numberPrecision">0</option>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </single>
+        </panel>
+        <panel>
+            <title> Command Executions</title>
+            <single>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ (audit_type="EXECVE" OR "type=EXECVE") earliest=$time.earliest$ latest=$time.latest$
+| stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="drilldown">all</option>
+                <option name="underLabel">EXECVE Events</option>
+                <option name="useColors">0</option>
+                <option name="numberPrecision">0</option>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20EXECVE&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </single>
+        </panel>
+        <panel>
+            <title> File Access Events</title>
+            <single>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ (audit_type="PATH" OR "type=PATH") earliest=$time.earliest$ latest=$time.latest$
+| stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="drilldown">all</option>
+                <option name="underLabel">File Operations</option>
+                <option name="useColors">0</option>
+                <option name="numberPrecision">0</option>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20PATH&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </single>
+        </panel>
+        <panel>
+            <title> User Activity</title>
+            <single>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ (audit_type="USER_*" OR "type=USER_") earliest=$time.earliest$ latest=$time.latest$
+| stats dc(uid) as unique_users</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="underLabel">Unique Users</option>
+                <option name="useColors">0</option>
+                <option name="numberPrecision">0</option>
+            </single>
+        </panel>
+        <panel>
+            <title> Active Hosts</title>
+            <single>
+                <search>
+                    <query>index=security sourcetype=linux_audit earliest=$time.earliest$ latest=$time.latest$
+| stats dc(host) as active_hosts</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="underLabel">Audited Systems</option>
+                <option name="useColors">0</option>
+                <option name="numberPrecision">0</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- AUDIT ACTIVITY TIMELINE ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>Audit Events Over Time</title>
+            <chart>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=_raw "type=(?&lt;event_category&gt;[A-Z_]+)"
+| eval event_category=if(isnull(event_category), audit_type, event_category)
+| eval category_group=case(
+    match(event_category, "^EXECVE"), "Command Execution",
+    match(event_category, "^PATH"), "File Access",
+    match(event_category, "^USER_"), "User Activity",
+    match(event_category, "^SYSCALL"), "System Calls",
+    match(event_category, "^CRED_"), "Credentials", 1=1, "Other"
+)
+| timechart span=5m count by category_group</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>1m</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.axisTitleX.visibility">collapsed</option>
+                <option name="charting.axisTitleY.text">Events</option>
+                <option name="charting.legend.placement">bottom</option>
+                <option name="charting.fieldColors">{"Command Execution":"#6DB7C6","File Access":"#f8be34","User Activity":"#53a051","System Calls":"#AE8EC1","Credentials":"#f1813f","Other":"#6c757d"}</option>
+                <option name="drilldown">all</option>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
+                </drilldown>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- COMMAND EXECUTION ANALYSIS ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>Top 20 Executed Commands</title>
+            <table>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ (audit_type="EXECVE" OR "type=EXECVE") earliest=$time.earliest$ latest=$time.latest$
+| rex field=_raw "a0=\"(?&lt;command&gt;[^\"]+)\""
+| rex field=_raw "uid=(?&lt;uid&gt;\d+)"
+| rex field=_raw "comm=\"(?&lt;process&gt;[^\"]+)\""
+| eval command=coalesce(command, process, "unknown")
+| stats count as executions, dc(uid) as unique_users, values(host) as hosts by command
+| sort -executions
+| head 20
+| eval risk_level=case(
+    match(command, "(?i)(sudo|su|passwd|chmod|chown)"), " High",
+    match(command, "(?i)(rm|mv|cp|dd)"), " Medium", 1=1, " Normal"
+)
+| table risk_level, command, executions, unique_users, hosts
+| rename risk_level as "Risk", command as "Command", executions as "Count", unique_users as "Users", hosts as "Hosts"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>1m</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="count">20</option>
+                <option name="drilldown">cell</option>
+                <option name="wrap">true</option>
+                <option name="rowNumbers">true</option>
+                <option name="dataOverlayMode">heatmap</option>
+                <format type="color" field="Risk">
+                    <colorPalette type="map">{" High":#dc4e41," Medium":#f8be34," Normal":#53a051}</colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20EXECVE%20$row.Command$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- FILE ACCESS & CHANGES ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>Critical File Changes (passwd, shadow, sudoers, SSH keys)</title>
+            <table>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (audit_type="PATH" OR "type=PATH") 
+(/etc/passwd OR /etc/shadow OR /etc/sudoers OR /root/.ssh OR /home/*/.ssh OR /etc/ssh)
+| rex field=_raw "name=\"(?&lt;file_path&gt;[^\"]+)\""
+| rex field=_raw "uid=(?&lt;uid&gt;\d+)"
+| rex field=_raw "comm=\"(?&lt;process&gt;[^\"]+)\""
+| stats count as access_count, latest(_time) as last_access, values(process) as processes by host, file_path, uid
+| eval last_access=strftime(last_access, "%Y-%m-%d %H:%M:%S")
+| eval severity=case(
+    match(file_path, "(?i)(shadow|passwd|sudoers)"), " Critical",
+    match(file_path, "(?i)ssh"), " High", 1=1, "🟡 Medium"
+)
+| sort -access_count
+| head 50
+| table severity, last_access, host, file_path, uid, processes, access_count
+| rename severity as "Severity", last_access as "Last Access", host as "Host", file_path as "File Path", uid as "UID", processes as "Process", access_count as "Count"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="count">15</option>
+                <option name="drilldown">cell</option>
+                <option name="wrap">true</option>
+                <option name="rowNumbers">true</option>
+                <format type="color" field="Severity">
+                    <colorPalette type="map">{" Critical":#dc4e41," High":#f1813f,"🟡 Medium":#f8be34}</colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20%22$row.File Path$%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- USER ACTIVITY ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>User Session Activity</title>
+            <table>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (audit_type="USER_START" OR audit_type="USER_END" OR "type=USER_START" OR "type=USER_END")
+| rex field=_raw "type=(?&lt;event_type&gt;USER_[A-Z]+)"
+| rex field=_raw "uid=(?&lt;uid&gt;\d+)"
+| rex field=_raw "addr=(?&lt;src_ip&gt;[0-9.]+)"
+| rex field=_raw "terminal=(?&lt;terminal&gt;\S+)"
+| stats count as events, latest(_time) as last_seen, values(event_type) as activities by host, uid, src_ip, terminal
+| eval last_seen=strftime(last_seen, "%Y-%m-%d %H:%M:%S")
+| eval activity_type=if(match(activities, "USER_START"), if(match(activities, "USER_END"), " Complete", "🟡 Active"), " Ended")
+| sort -events
+| head 20
+| table activity_type, last_seen, host, uid, src_ip, terminal, events
+| rename activity_type as "Status", last_seen as "Last Seen", host as "Host", uid as "UID", src_ip as "Source IP", terminal as "Terminal", events as "Events"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="count">15</option>
+                <option name="drilldown">cell</option>
+                <option name="wrap">true</option>
+                <option name="rowNumbers">true</option>
+                <format type="color" field="Status">
+                    <colorPalette type="map">{" Complete":#53a051,"🟡 Active":#f8be34," Ended":#6c757d}</colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20uid%3D$row.UID$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- SUDO & PRIVILEGED ACCESS ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>Sudo Commands &amp; Privileged Access</title>
+            <table>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (audit_type="USER_CMD" OR "type=USER_CMD" OR "comm=\"sudo\"")
+| rex field=_raw "uid=(?&lt;uid&gt;\d+)"
+| rex field=_raw "comm=\"(?&lt;command&gt;[^\"]+)\""
+| rex field=_raw "cmd=\"(?&lt;full_command&gt;[^\"]+)\""
+| rex field=_raw "terminal=(?&lt;terminal&gt;\S+)"
+| eval command_display=coalesce(full_command, command, "unknown")
+| stats count as executions, latest(_time) as last_execution by host, uid, terminal, command_display
+| eval last_execution=strftime(last_execution, "%Y-%m-%d %H:%M:%S")
+| eval risk=case(
+    match(command_display, "(?i)(passwd|useradd|userdel|groupadd|groupdel)"), " Critical",
+    match(command_display, "(?i)(chmod|chown|rm -rf)"), " High",
+    match(command_display, "(?i)(apt|yum|dnf|systemctl)"), "🟡 Medium", 1=1, " Normal"
+)
+| sort -executions
+| head 30
+| table risk, last_execution, host, uid, terminal, command_display, executions
+| rename risk as "Risk", last_execution as "Last Execution", host as "Host", uid as "UID", terminal as "Terminal", command_display as "Command", executions as "Count"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="count">20</option>
+                <option name="drilldown">cell</option>
+                <option name="wrap">true</option>
+                <option name="rowNumbers">true</option>
+                <format type="color" field="Risk">
+                    <colorPalette type="map">{" Critical":#dc4e41," High":#f1813f,"🟡 Medium":#f8be34," Normal":#53a051}</colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20sudo%20$row.Command$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- NETWORK & SYSCALL ACTIVITY ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>Network Connection Activity (Socket Syscalls)</title>
+            <table>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (audit_type="SYSCALL" OR "type=SYSCALL") (syscall="socket" OR syscall="connect" OR syscall="bind" OR syscall="listen" OR "syscall=42" OR "syscall=43" OR "syscall=44" OR "syscall=49")
+| rex field=_raw "syscall=(?&lt;syscall_num&gt;\d+)"
+| rex field=_raw "uid=(?&lt;uid&gt;\d+)"
+| rex field=_raw "comm=\"(?&lt;process&gt;[^\"]+)\""
+| rex field=_raw "saddr=(?&lt;socket_addr&gt;\S+)"
+| eval syscall_name=case( syscall_num="41" OR syscall_num="socket", "socket", syscall_num="42" OR syscall_num="connect", "connect", syscall_num="43" OR syscall_num="bind", "bind", syscall_num="49" OR syscall_num="listen", "listen", 1=1, syscall_num
+)
+| stats count as calls, values(socket_addr) as addresses by host, uid, process, syscall_name
+| sort -calls
+| head 20
+| table host, uid, process, syscall_name, calls, addresses
+| rename host as "Host", uid as "UID", process as "Process", syscall_name as "Syscall", calls as "Count", addresses as "Addresses"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="count">15</option>
+                <option name="drilldown">cell</option>
+                <option name="wrap">true</option>
+                <option name="rowNumbers">true</option>
+                <option name="dataOverlayMode">heatmap</option>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20SYSCALL%20$row.Process$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- AUDIT TYPE DISTRIBUTION ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>Audit Event Types Distribution</title>
+            <chart>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| rex field=_raw "type=(?&lt;event_type&gt;[A-Z_]+)"
+| eval event_type=coalesce(event_type, audit_type, "UNKNOWN")
+| stats count by event_type
+| sort -count
+| head 15</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.chart.showPercent">true</option>
+                <option name="drilldown">all</option>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </chart>
+        </panel>
+        <panel>
+            <title>Activity by Host</title>
+            <chart>
+                <search>
+                    <query>index=security sourcetype=linux_audit earliest=$time.earliest$ latest=$time.latest$
+| stats count by host
+| sort -count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>30s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="charting.chart">bar</option>
+                <option name="charting.axisTitleX.text">Events</option>
+                <option name="charting.axisTitleY.text">Host</option>
+                <option name="charting.chart.showDataLabels">all</option>
+                <option name="charting.seriesColors">[0x6DB7C6]</option>
+                <option name="drilldown">all</option>
+                <drilldown>
+                    <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20host%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+                </drilldown>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- ============================================== -->
+    <!-- RECENT AUDIT EVENTS ROW -->
+    <!-- ============================================== -->
+    <row>
+        <panel>
+            <title>Recent Audit Events (Live Feed)</title>
+            <event>
+                <search>
+                    <query>index=security sourcetype=linux_audit host=$host_filter$ audit_type=$audit_type_filter$ earliest=$time.earliest$ latest=$time.latest$
+| head 100</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                    <refresh>10s</refresh>
+                    <refreshType>delay</refreshType>
+                </search>
+                <option name="count">20</option>
+                <option name="list.drilldown">full</option>
+                <option name="list.wrap">true</option>
+                <option name="maxLines">5</option>
+                <option name="raw.drilldown">full</option>
+                <option name="table.drilldown">true</option>
+                <option name="table.wrap">true</option>
+                <option name="type">list</option>
+            </event>
+        </panel>
+    </row>
+
+</form>
+

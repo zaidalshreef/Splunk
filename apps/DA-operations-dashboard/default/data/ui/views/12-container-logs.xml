@@ -1,7 +1,7 @@
 <form version="1.1" theme="dark">
   <label> Container Logs Command Center</label>
   <description>Real-time Container Log Analysis, Error Detection, and Log Stream Monitoring</description>
-
+  
   <!-- ============================================== -->
   <!-- GLOBAL SETTINGS -->
   <!-- ============================================== -->
@@ -221,7 +221,8 @@
 | where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | eval log_level=case(
     match(_raw, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", "Error",
-    match(_raw, "(?i)(WARN|warn|Warning)"), "Warning", 1=1, "Other"
+    match(_raw, "(?i)(WARN|warn|Warning)"), "Warning",
+    1=1, "Other"
 )
 | search log_level!="Other"
 | timechart span=1m count by log_level</query>
@@ -297,7 +298,11 @@
 | stats count as error_count by container_display, host
 | sort -error_count
 | head 15
-| eval severity=case( error_count&gt;=100, " Critical", error_count&gt;=50, " High", error_count&gt;=10, "🟡 Medium", 1=1, " Low"
+| eval severity=case(
+    error_count&gt;=100, " Critical",
+    error_count&gt;=50, " High",
+    error_count&gt;=10, "🟡 Medium",
+    1=1, " Low"
 )
 | table severity, container_display, host, error_count
 | rename severity as "Severity", container_display as "Container", host as "Host", error_count as "Error Count"</query>
@@ -360,7 +365,8 @@
     match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr", "ERROR",
     match(log_msg, "(?i)(WARN|Warning)"), "WARN",
     match(log_msg, "(?i)INFO"), "INFO",
-    match(log_msg, "(?i)DEBUG"), "DEBUG", 1=1, "OTHER"
+    match(log_msg, "(?i)DEBUG"), "DEBUG",
+    1=1, "OTHER"
 )
 | stats count by log_level
 | sort -count</query>
@@ -438,7 +444,8 @@
     match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr", "ERROR",
     match(log_msg, "(?i)(WARN|Warning)"), "WARN",
     match(log_msg, "(?i)INFO"), "INFO",
-    match(log_msg, "(?i)DEBUG"), "DEBUG", 1=1, "OTHER"
+    match(log_msg, "(?i)DEBUG"), "DEBUG",
+    1=1, "OTHER"
 )
 | eval log_msg_display=if(len(log_msg)&gt;200, substr(log_msg,1,197)."...", log_msg)
 | table _time, log_level, container_display, host, log_msg_display

@@ -1,0 +1,457 @@
+<form version="1.1" theme="dark">
+  <label> Infrastructure Command Center</label>
+  <description>VM Health, Cluster Status, Service Discovery, and Infrastructure Metrics</description>
+  
+  <!-- ============================================== -->
+  <!-- GLOBAL SETTINGS -->
+  <!-- ============================================== -->
+  <fieldset submitButton="true" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-1h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="host_filter" searchWhenChanged="true">
+      <label>Host</label>
+      <choice value="*">All Hosts</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+      <fieldForLabel>host</fieldForLabel>
+      <fieldForValue>host</fieldForValue>
+      <search>
+        <query>(index=linux OR index=docker OR index=security) | stats count by host</query>
+        <earliest>$time.earliest$</earliest>
+        <latest>$time.latest$</latest>
+      </search>
+    </input>
+  </fieldset>
+
+  <!-- ============================================== -->
+  <!-- CLUSTER HEALTH ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title> Active VMs</title>
+      <single>
+        <search>
+          <query>(index=linux OR index=docker OR index=security) host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats dc(host) as active_hosts</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="underLabel">Online Hosts</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3D*%20%7C%20stats%20count%20by%20host&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Swarm Cluster Health</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:metrics" event_type="docker_swarm_node" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| dedup node_id sortby -_time
+| eval health_score=case(
+    status="ready" AND availability="active", 100,
+    status="ready" AND availability!="active", 50,
+    1=1, 0
+)
+| stats avg(health_score) as cluster_health
+| eval cluster_health=round(cluster_health, 0)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0xdc4e41","0xf1813f","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[0,50,75,90]</option>
+        <option name="underLabel">Health Score</option>
+        <option name="useColors">1</option>
+        <option name="numberPrecision">0</option>
+        <option name="unit">%</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20event_type%3D%22docker_swarm_node%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Manager Nodes</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:metrics" event_type="docker_swarm_node" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| dedup node_id sortby -_time
+| search manager_status!="null" AND manager_status!=""
+| stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="underLabel">Swarm Managers</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20manager_status%3D*&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Worker Nodes</title>
+      <single>
+        <search>
+          <query>index=docker sourcetype="docker:metrics" event_type="docker_swarm_node" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| dedup node_id sortby -_time
+| search manager_status="null" OR manager_status=""
+| stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="underLabel">Swarm Workers</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20event_type%3D%22docker_swarm_node%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title> Total Events/Sec</title>
+      <single>
+        <search>
+          <query>index=* host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count as total_events
+| eval time_range=relative_time(now(), "$time.earliest$")
+| eval duration_seconds=now()-time_range
+| eval eps=round(total_events/duration_seconds, 2)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">Events Per Second</option>
+        <option name="useColors">0</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="unit">eps</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- VM ACTIVITY TRENDS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Host Activity Timeline (All Indexes)</title>
+      <chart>
+        <search>
+          <query>(index=linux OR index=docker OR index=security OR index=traefik) host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| timechart span=5m count by host limit=10</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>1m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Events</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=host%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- SWARM CLUSTER DETAILS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Docker Swarm Node Status</title>
+      <table>
+        <search>
+          <query>index=docker sourcetype="docker:metrics" event_type="docker_swarm_node" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| dedup node_id sortby -_time
+| eval health_icon=case(
+    status="ready" AND availability="active" AND (manager_status="reachable" OR manager_status="null"), "",
+    status="ready" AND availability="active" AND manager_status="leader", "⭐",
+    status="ready" AND availability!="active", "🟡",
+    1=1, ""
+)
+| eval role=if(manager_status!="null" AND manager_status!="", "Manager ("+manager_status+")", "Worker")
+| table health_icon, hostname, status, availability, role, engine_version
+| rename health_icon as "St", hostname as "Hostname", status as "Status", availability as "Availability", role as "Role", engine_version as "Docker Version"
+| sort Hostname</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">false</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"ready":#53a051,"down":#dc4e41,"unknown":#6c757d}</colorPalette>
+        </format>
+        <format type="color" field="Availability">
+          <colorPalette type="map">{"active":#53a051,"drain":#f8be34,"pause":#f1813f}</colorPalette>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20hostname%3D$row.Hostname$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- CONTAINER DISTRIBUTION ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Container Distribution by Host</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:metrics" event_type="docker_container" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| dedup container_id sortby -_time
+| search status="running"
+| stats count by host
+| sort -count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Running Containers</option>
+        <option name="charting.axisTitleY.text">Host</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20host%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Service Distribution by Image</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:metrics" event_type="docker_container" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| dedup container_id sortby -_time
+| search status="running"
+| eval image_short=mvindex(split(image, "/"), -1)
+| eval image_name=mvindex(split(image_short, ":"), 0)
+| stats count by image_name
+| sort -count
+| head 10</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20image%3D*$click.name2$*&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- DATA INGESTION STATS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Data Ingestion by Index</title>
+      <chart>
+        <search>
+          <query>index=* host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count by index
+| sort -count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Events</option>
+        <option name="charting.axisTitleY.text">Index</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Sourcetype Distribution</title>
+      <chart>
+        <search>
+          <query>index=* host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count by sourcetype
+| sort -count
+| head 10</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.showPercent">true</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=sourcetype%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- HOST DETAILS ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Host Activity Summary</title>
+      <table>
+        <search>
+          <query>(index=linux OR index=docker OR index=security OR index=traefik) host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| stats count as total_events, dc(index) as indexes_used, dc(sourcetype) as sourcetypes, earliest(_time) as first_seen, latest(_time) as last_seen by host
+| eval uptime=round((last_seen-first_seen)/60, 1)
+| eval first_seen=strftime(first_seen, "%Y-%m-%d %H:%M:%S")
+| eval last_seen=strftime(last_seen, "%Y-%m-%d %H:%M:%S")
+| table host, total_events, indexes_used, sourcetypes, uptime, last_seen
+| rename host as "Host", total_events as "Total Events", indexes_used as "Indexes", sourcetypes as "Sourcetypes", uptime as "Activity Duration (min)", last_seen as "Last Seen"
+| sort -"Total Events"</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">true</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=host%3D$row.Host$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- DOCKER DAEMON INFO ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Docker Daemon Statistics</title>
+      <table>
+        <search>
+          <query>index=docker sourcetype="docker:metrics" event_type="docker_daemon" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| dedup host sortby -_time
+| eval health_icon=case(
+    containers_running=containers_total, "",
+    containers_running&gt;0, "🟡",
+    1=1, ""
+)
+| table health_icon, host, containers_total, containers_running, containers_paused, containers_stopped, images
+| rename health_icon as "St", host as "Host", containers_total as "Total", containers_running as "Running", containers_paused as "Paused", containers_stopped as "Stopped", images as "Images"
+| sort Host</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">false</option>
+        <format type="color" field="Running">
+          <colorPalette type="minMidMax" minColor="#6c757d" midColor="#f8be34" maxColor="#53a051"></colorPalette>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20host%3D$row.Host$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ============================================== -->
+  <!-- SYSTEM RESOURCE OVERVIEW ROW -->
+  <!-- ============================================== -->
+  <row>
+    <panel>
+      <title>Average Container CPU Usage by Host</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:stats" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval cpu_percent_clean=replace(cpu_percent, "%", "")
+| eval cpu_val=tonumber(cpu_percent_clean)
+| stats avg(cpu_val) as avg_cpu by host
+| eval avg_cpu=round(avg_cpu, 2)
+| sort -avg_cpu</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Average CPU %</option>
+        <option name="charting.axisTitleY.text">Host</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Astats%22%20host%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Average Container Memory Usage by Host</title>
+      <chart>
+        <search>
+          <query>index=docker sourcetype="docker:stats" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
+| eval mem_percent_clean=replace(mem_percent, "%", "")
+| eval mem_val=tonumber(mem_percent_clean)
+| stats avg(mem_val) as avg_mem by host
+| eval avg_mem=round(avg_mem, 2)
+| sort -avg_mem</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Average Memory %</option>
+        <option name="charting.axisTitleY.text">Host</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.seriesColors">[0xAC8EC1]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Astats%22%20host%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+</form>
+

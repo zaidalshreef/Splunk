@@ -1,0 +1,319 @@
+<form version="1.1" theme="dark">
+    <label>📦 BookingApp Monitoring</label>
+    <description>NestJS API • NextJS Frontend • PostgreSQL • Redis - Real-time Application Health</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>⏱️ Time Range</label>
+            <default>
+                <earliest>-1h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+        <input type="dropdown" token="component" searchWhenChanged="true">
+            <label>🔧 Component</label>
+            <choice value="*">All Components</choice>
+            <choice value="nestjs:json">NestJS API</choice>
+            <choice value="nextjs:log">NextJS Frontend</choice>
+            <choice value="postgresql:log">PostgreSQL</choice>
+            <choice value="redis:log">Redis</choice>
+            <default>*</default>
+        </input>
+        <input type="dropdown" token="level_filter" searchWhenChanged="true">
+            <label>📊 Log Level</label>
+            <choice value="*">All Levels</choice>
+            <choice value="error">Error</choice>
+            <choice value="warn">Warning</choice>
+            <choice value="info">Info</choice>
+            <choice value="debug">Debug</choice>
+            <default>*</default>
+        </input>
+    </fieldset>
+
+    <!-- ==================== HEALTH OVERVIEW ==================== -->
+    <row>
+        <panel>
+            <title>🩺 API Health</title>
+            <single>
+                <search>
+                    <query>
+(index=apps sourcetype=nestjs:json) OR (index=docker host=bookingapp)
+| stats count as total, count(eval(match(level, "error"))) as errors
+| eval health=if(total>0, round((1-(errors/total))*100, 1), 100)
+| eval health=if(health>100, 100, health)
+| fields health
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="numberPrecision">0.0</option>
+                <option name="rangeColors">["#DC4E41","#F8BE34","#53A051"]</option>
+                <option name="rangeValues">[80,95]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>📊 Total Requests</title>
+            <single>
+                <search>
+                    <query>
+(index=apps sourcetype=nestjs:json) OR (index=docker host=bookingapp sourcetype="docker:container:json")
+| stats count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>⚠️ Errors</title>
+            <single>
+                <search>
+                    <query>
+(index=apps sourcetype=nestjs:json level=error) OR (index=docker host=bookingapp "error" OR "ERROR")
+| stats count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[10,50]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>⚡ Avg Response (ms)</title>
+            <single>
+                <search>
+                    <query>
+index=apps sourcetype=nestjs:json duration>0
+| stats avg(duration) as avg_duration
+| eval avg_duration=round(avg_duration, 0)
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[500,2000]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>🗄️ Active Containers</title>
+            <single>
+                <search>
+                    <query>
+index=docker host=bookingapp sourcetype="docker:container:json" earliest=-5m
+| rex field=source "\/containers\/(?&lt;container_id&gt;[a-f0-9]{12})"
+| stats dc(container_id) as containers
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#DC4E41","#53A051"]</option>
+                <option name="rangeValues">[1]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- ==================== REQUEST TRENDS ==================== -->
+    <row>
+        <panel>
+            <title>📈 Request Volume Over Time</title>
+            <chart>
+                <search>
+                    <query>
+(index=apps sourcetype=nestjs:json) OR (index=docker host=bookingapp)
+| timechart span=1m count as Requests
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.legend.placement">bottom</option>
+                <option name="charting.fieldColors">{"Requests": "#00D1B2"}</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>⚠️ Error Trend</title>
+            <chart>
+                <search>
+                    <query>
+(index=apps sourcetype=nestjs:json level=error) OR (index=docker host=bookingapp ("error" OR "ERROR"))
+| timechart span=5m count as Errors
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Errors": "#DC4E41"}</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- ==================== TOP ENDPOINTS / ERRORS ==================== -->
+    <row>
+        <panel>
+            <title>🔝 Top API Endpoints</title>
+            <table>
+                <search>
+                    <query>
+index=apps sourcetype=nestjs:json url=*
+| stats count, avg(duration) as avg_ms, max(duration) as max_ms by url
+| sort -count
+| head 10
+| eval avg_ms=round(avg_ms, 0), max_ms=round(max_ms, 0)
+| rename url as "Endpoint", count as "Requests", avg_ms as "Avg (ms)", max_ms as "Max (ms)"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="refresh.display">progressbar</option>
+            </table>
+        </panel>
+        <panel>
+            <title>❌ Recent Errors</title>
+            <table>
+                <search>
+                    <query>
+(index=apps sourcetype=nestjs:json level=error) OR (index=docker host=bookingapp ("error" OR "ERROR" OR "Error"))
+| head 20
+| eval message=coalesce(error_message, message, log_message, _raw)
+| eval message=substr(message, 1, 100)
+| table _time, context, message
+| rename context as "Context", message as "Error Message"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="refresh.display">progressbar</option>
+                <format type="color" field="Error Message">
+                    <colorPalette type="sharedList"></colorPalette>
+                    <scale type="sharedCategory"></scale>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ==================== DATABASE / CACHE ==================== -->
+    <row>
+        <panel>
+            <title>🗃️ PostgreSQL Query Performance</title>
+            <chart>
+                <search>
+                    <query>
+index=apps sourcetype=postgresql:log pg_duration>0
+| timechart span=5m avg(pg_duration) as "Avg Query Time (ms)", max(pg_duration) as "Max Query Time (ms)"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.legend.placement">bottom</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>⚡ Redis Operations</title>
+            <chart>
+                <search>
+                    <query>
+index=apps sourcetype=redis:log
+| timechart span=5m count as "Redis Operations"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Redis Operations": "#FF6384"}</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- ==================== CONTAINER LOGS ==================== -->
+    <row>
+        <panel>
+            <title>📋 Live Container Logs (BookingApp)</title>
+            <event>
+                <search>
+                    <query>
+index=docker host=bookingapp sourcetype="docker:container:json"
+| spath input=_raw path=log output=log_message
+| spath input=_raw path=stream output=stream
+| eval display=log_message." ["stream"]"
+| fields _time, display, stream
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="count">20</option>
+                <option name="list.drilldown">none</option>
+                <option name="refresh.display">progressbar</option>
+                <option name="rowNumbers">true</option>
+            </event>
+        </panel>
+    </row>
+
+    <!-- ==================== COMPONENT BREAKDOWN ==================== -->
+    <row>
+        <panel>
+            <title>🧩 Logs by Component</title>
+            <chart>
+                <search>
+                    <query>
+(index=apps sourcetype=$component$) OR (index=docker host=bookingapp)
+| eval component=case( sourcetype="nestjs:json", "NestJS API", sourcetype="nextjs:log", "NextJS Frontend", sourcetype="postgresql:log", "PostgreSQL", sourcetype="redis:log", "Redis", sourcetype="docker:container:json", "Docker Container", 1=1, "Other"
+)
+| stats count by component
+| sort -count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>📊 Log Levels Distribution</title>
+            <chart>
+                <search>
+                    <query>
+(index=apps sourcetype=nestjs:json) OR (index=docker host=bookingapp)
+| eval level=coalesce(level, if(match(_raw, "(?i)error"), "error", if(match(_raw, "(?i)warn"), "warn", "info")))
+| stats count by level
+| sort -count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"error": "#DC4E41", "warn": "#F8BE34", "info": "#53A051", "debug": "#6699CC"}</option>
+            </chart>
+        </panel>
+    </row>
+</form>
+
