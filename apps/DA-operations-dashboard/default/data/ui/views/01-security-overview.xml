@@ -1,7 +1,7 @@
 <form version="1.1" theme="dark">
   <label> Security Command Center</label>
   <description>Real-time Security Monitoring, Threat Detection, and Authentication Analysis</description>
-  
+
   <!-- ============================================== -->
   <!-- GLOBAL SETTINGS -->
   <!-- ============================================== -->
@@ -49,14 +49,12 @@
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
-| eventstats count as total_events
-| search "failed" OR "invalid" OR "denied" OR "error"
-| eventstats count as failed_events
-| eval security_score=round(100-((failed_events/total_events)*100), 1)
+| eval is_failed=if(match(_raw, "(?i)(failed|invalid|denied|error)"), 1, 0)
+| stats count as total_events, sum(is_failed) as failed_events
+| eval security_score=if(total_events>0, round(100-((failed_events/total_events)*100), 1), 100)
 | head 1
 | fields security_score
 | eval security_score=if(isnull(security_score), 98.5, security_score)</query>
@@ -78,8 +76,7 @@
       <title> Failed Logins</title>
       <single>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "authentication failure" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "authentication failure" OR "Invalid user")
 | eval severity="high"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count</query>
@@ -102,8 +99,7 @@
       <title> Successful Logins</title>
       <single>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Accepted password" OR "Accepted publickey" OR "session opened")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Accepted password" OR "Accepted publickey" OR "session opened")
 | eval severity="low"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count</query>
@@ -124,8 +120,7 @@
       <title> Sudo Commands</title>
       <single>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) "sudo"
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) "sudo"
 | eval severity="medium"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count</query>
@@ -150,8 +145,7 @@
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
@@ -177,19 +171,16 @@
       <title>Authentication Activity Timeline</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog)
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog)
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | eval auth_status=case(
     match(_raw, "(?i)(failed|invalid|authentication failure)"), "Failed",
-    match(_raw, "(?i)(accepted|session opened)"), "Success",
-    1=1, "Other"
+    match(_raw, "(?i)(accepted|session opened)"), "Success", 1=1, "Other"
 )
 | timechart span=5m count by auth_status</query>
           <earliest>$time.earliest$</earliest>
@@ -220,8 +211,7 @@
       <title> Brute Force Detection (5+ failures in 5 min)</title>
       <table>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
 | eval severity="critical"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
@@ -261,8 +251,7 @@
       <title>Top Failed Login Attempts by Source IP</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
 | eval severity="high"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
@@ -289,8 +278,7 @@
       <title>Most Targeted User Accounts</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
 | eval severity="high"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "(?i)(failed password|invalid user)\s+for\s+(invalid user\s+)?(?&lt;user&gt;\S+)"
@@ -320,8 +308,7 @@
       <title>Recent Sudo Commands (Privileged Access)</title>
       <table>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) "sudo"
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) "sudo"
 | eval severity="medium"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "sudo:\s+(?&lt;user&gt;\S+)\s+:\s+TTY=(?&lt;tty&gt;\S+)\s+;\s+PWD=(?&lt;pwd&gt;\S+)\s+;\s+USER=(?&lt;target_user&gt;\S+)\s+;\s+COMMAND=(?&lt;command&gt;.*)"
@@ -352,13 +339,11 @@
       <title>Authentication Activity by Host</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog)
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog)
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | timechart span=10m count by host limit=10</query>
@@ -386,8 +371,7 @@
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count by sourcetype
@@ -419,8 +403,7 @@
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | head 100</query>

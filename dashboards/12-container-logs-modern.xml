@@ -1,11 +1,9 @@
 <form version="1.1" theme="dark">
-  <label> Container Logs Command Center</label>
-  <description>Real-time Container Log Analysis, Error Detection, and Log Stream Monitoring</description>
+  <label>Container Logs Command Center</label>
+  <description>Real-time Container Log Analysis • Error Detection • Log Stream Monitoring</description>
 
-  <!-- ============================================== -->
-  <!-- GLOBAL SETTINGS -->
-  <!-- ============================================== -->
-  <fieldset submitButton="true" autoRun="true">
+  <!-- ==================== GLOBAL SETTINGS ==================== -->
+  <fieldset submitButton="false" autoRun="true">
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time Range</label>
       <default>
@@ -36,7 +34,8 @@
       <search>
         <query>index=docker sourcetype="docker:container:json" earliest=-24h
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_name=coalesce(container_name, container_short_id)
 | stats count by container_short_id, container_name
 | sort -count</query>
@@ -66,117 +65,114 @@
     </input>
   </fieldset>
 
-  <!-- ============================================== -->
-  <!-- KEY METRICS ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== KEY METRICS ROW ==================== -->
   <row>
     <panel>
-      <title> Total Log Events</title>
+      <title>TOTAL LOG EVENTS</title>
       <single>
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
 | where container_short_id="$container_filter$" OR "$container_filter$"="*"
-| stats count</query>
+| stats count
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x3b82f6","0x3b82f6","0x3b82f6"]</option>
         <option name="underLabel">Log Lines</option>
-        <option name="useColors">0</option>
-        <option name="numberPrecision">0</option>
+        <option name="useColors">1</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
         </drilldown>
       </single>
     </panel>
     <panel>
-      <title> Error Count</title>
+      <title>ERROR COUNT</title>
       <single>
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
 | where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | search (ERROR OR error OR Exception OR FATAL OR stream="stderr")
-| stats count</query>
+| stats count
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
-        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
-        <option name="rangeValues">[0,10,50,100]</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[10,50]</option>
         <option name="underLabel">Errors Detected</option>
         <option name="useColors">1</option>
-        <option name="numberPrecision">0</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20%28ERROR%20OR%20error%20OR%20Exception%29&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
         </drilldown>
       </single>
     </panel>
     <panel>
-      <title> Warning Count</title>
+      <title>WARNING COUNT</title>
       <single>
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
 | where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | search (WARN OR warn OR Warning)
-| stats count</query>
+| stats count
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
-        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
-        <option name="rangeValues">[0,20,100,200]</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[20,100]</option>
         <option name="underLabel">Warnings Detected</option>
         <option name="useColors">1</option>
-        <option name="numberPrecision">0</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20%28WARN%20OR%20warn%20OR%20Warning%29&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
         </drilldown>
       </single>
     </panel>
     <panel>
-      <title> Active Containers</title>
+      <title>ACTIVE CONTAINERS</title>
       <single>
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
-| stats dc(container_short_id) as unique_containers</query>
+| stats dc(container_short_id) as unique_containers
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x8b5cf6","0x8b5cf6","0x8b5cf6"]</option>
         <option name="underLabel">Logging Containers</option>
-        <option name="useColors">0</option>
-        <option name="numberPrecision">0</option>
+        <option name="useColors">1</option>
       </single>
     </panel>
     <panel>
-      <title> Logs Per Second</title>
+      <title>LOGS/SEC</title>
       <single>
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
 | where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | stats count as total_logs
-| eval lps=if(total_logs&gt;0, round(total_logs/300, 2), 0)</query>
+| eval lps=if(total_logs&gt;0, round(total_logs/300, 2), 0)
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>10s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x06b6d4","0x06b6d4","0x06b6d4"]</option>
         <option name="underLabel">Log Velocity</option>
-        <option name="useColors">0</option>
+        <option name="useColors">1</option>
         <option name="numberPrecision">0.00</option>
         <option name="unit">lps</option>
       </single>
@@ -204,7 +200,7 @@
         <option name="charting.axisTitleX.visibility">collapsed</option>
         <option name="charting.axisTitleY.text">Log Events</option>
         <option name="charting.legend.placement">none</option>
-        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="charting.seriesColors">[0x3b82f6]</option>
         <option name="charting.chart.nullValueMode">connect</option>
         <option name="drilldown">all</option>
         <drilldown>
@@ -254,7 +250,8 @@
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | eval container_display=if(len(container_display)&gt;40, substr(container_display,1,37)."...", container_display)
 | stats count as log_events by container_display
@@ -269,7 +266,7 @@
         <option name="charting.axisTitleX.text">Log Events</option>
         <option name="charting.axisTitleY.text">Container</option>
         <option name="charting.chart.showDataLabels">all</option>
-        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="charting.seriesColors">[0x3b82f6]</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Acontainer%3Ajson%22%20container_name%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -291,7 +288,8 @@
 | spath input=_raw path=stream output=stream_type
 | spath input=_raw path=log output=log_msg
 | search stream_type=*
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | where match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr"
 | stats count as error_count by container_display, host
@@ -393,7 +391,8 @@
 | spath input=_raw path=stream output=stream_type
 | spath input=_raw path=log output=log_msg
 | search stream_type=*
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | where match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr"
 | eval log_msg_short=if(len(log_msg)&gt;150, substr(log_msg,1,147)."...", log_msg)
@@ -432,7 +431,8 @@
 | spath input=_raw path=stream output=stream_type
 | spath input=_raw path=log output=log_msg
 | search stream_type=*
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | eval log_level=case(
     match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr", "ERROR",

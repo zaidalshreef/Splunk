@@ -1,11 +1,9 @@
 <form version="1.1" theme="dark">
-  <label> Security Command Center</label>
-  <description>Real-time Security Monitoring, Threat Detection, and Authentication Analysis</description>
-  
-  <!-- ============================================== -->
-  <!-- GLOBAL SETTINGS -->
-  <!-- ============================================== -->
-  <fieldset submitButton="true" autoRun="true">
+  <label>Security Command Center</label>
+  <description>Real-time Security Monitoring • Threat Detection • Authentication Analysis</description>
+
+  <!-- ==================== GLOBAL SETTINGS ==================== -->
+  <fieldset submitButton="false" autoRun="true">
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time Range</label>
       <default>
@@ -37,37 +35,30 @@
     </input>
   </fieldset>
 
-  <!-- ============================================== -->
-  <!-- KEY METRICS ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== KEY METRICS ROW ==================== -->
   <row>
     <panel>
-      <title> Security Score</title>
+      <title>SECURITY SCORE</title>
       <single>
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
-| eventstats count as total_events
-| search "failed" OR "invalid" OR "denied" OR "error"
-| eventstats count as failed_events
-| eval security_score=round(100-((failed_events/total_events)*100), 1)
-| head 1
-| fields security_score
-| eval security_score=if(isnull(security_score), 98.5, security_score)</query>
+| eval is_failed=if(match(_raw, "(?i)(failed|invalid|denied|error)"), 1, 0)
+| stats count as total_events, sum(is_failed) as failed_events
+| eval security_score=if(total_events>0, round(100-((failed_events/total_events)*100), 1), 100)
+| fillnull value=100 security_score</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">none</option>
-        <option name="rangeColors">["0xdc4e41","0xf1813f","0xf8be34","0x53a051"]</option>
-        <option name="rangeValues">[0,70,85,95]</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xdc2626","0xf59e0b","0xeab308","0x10b981"]</option>
+        <option name="rangeValues">[70,85,95]</option>
         <option name="underLabel">Health Index</option>
         <option name="useColors">1</option>
         <option name="numberPrecision">0.0</option>
@@ -75,22 +66,21 @@
       </single>
     </panel>
     <panel>
-      <title> Failed Logins</title>
+      <title>FAILED LOGINS</title>
       <single>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "authentication failure" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "authentication failure" OR "Invalid user")
 | eval severity="high"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
-| stats count</query>
+| stats count
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
-        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
-        <option name="rangeValues">[0,10,50,100]</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[10,50]</option>
         <option name="underLabel">Authentication Failures</option>
         <option name="useColors">1</option>
         <drilldown>
@@ -99,97 +89,92 @@
       </single>
     </panel>
     <panel>
-      <title> Successful Logins</title>
+      <title>SUCCESSFUL LOGINS</title>
       <single>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Accepted password" OR "Accepted publickey" OR "session opened")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Accepted password" OR "Accepted publickey" OR "session opened")
 | eval severity="low"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
-| stats count</query>
+| stats count
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x3b82f6","0x3b82f6","0x3b82f6"]</option>
         <option name="underLabel">Valid Sessions</option>
-        <option name="useColors">0</option>
+        <option name="useColors">1</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dsecurity%20%22Accepted%20password%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
         </drilldown>
       </single>
     </panel>
     <panel>
-      <title> Sudo Commands</title>
+      <title>SUDO COMMANDS</title>
       <single>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) "sudo"
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) "sudo"
 | eval severity="medium"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
-| stats count</query>
+| stats count
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x8b5cf6","0x8b5cf6","0x8b5cf6"]</option>
         <option name="underLabel">Privileged Commands</option>
-        <option name="useColors">0</option>
+        <option name="useColors">1</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dsecurity%20sudo&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
         </drilldown>
       </single>
     </panel>
     <panel>
-      <title> Unique Source IPs</title>
+      <title>UNIQUE SOURCE IPs</title>
       <single>
         <search>
           <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
 | where isnotnull(src_ip) AND src_ip!="127.0.0.1"
-| stats dc(src_ip) as unique_ips</query>
+| stats dc(src_ip) as unique_ips
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x06b6d4","0x06b6d4","0x06b6d4"]</option>
         <option name="underLabel">Remote Hosts</option>
-        <option name="useColors">0</option>
+        <option name="useColors">1</option>
       </single>
     </panel>
   </row>
 
-  <!-- ============================================== -->
-  <!-- TREND CHARTS ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== TREND CHARTS ROW ==================== -->
   <row>
     <panel>
       <title>Authentication Activity Timeline</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog)
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog)
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | eval auth_status=case(
     match(_raw, "(?i)(failed|invalid|authentication failure)"), "Failed",
-    match(_raw, "(?i)(accepted|session opened)"), "Success",
-    1=1, "Other"
+    match(_raw, "(?i)(accepted|session opened)"), "Success", 1=1, "Other"
 )
 | timechart span=5m count by auth_status</query>
           <earliest>$time.earliest$</earliest>
@@ -202,8 +187,8 @@
         <option name="charting.axisTitleX.visibility">collapsed</option>
         <option name="charting.axisTitleY.text">Events</option>
         <option name="charting.legend.placement">bottom</option>
-        <option name="charting.seriesColors">[0xdc4e41,0x53a051,0x6c757d]</option>
-        <option name="charting.fieldColors">{"Failed":"#dc4e41","Success":"#53a051","Other":"#6c757d"}</option>
+        <option name="charting.seriesColors">[0xdc2626,0x10b981,0x64748b]</option>
+        <option name="charting.fieldColors">{"Failed":"#dc2626","Success":"#10b981","Other":"#64748b"}</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dsecurity%20earliest%3D$click.value$&amp;latest%3D$click.value2$</link>
@@ -212,16 +197,13 @@
     </panel>
   </row>
 
-  <!-- ============================================== -->
-  <!-- THREAT DETECTION ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== THREAT DETECTION ROW ==================== -->
   <row>
     <panel>
       <title> Brute Force Detection (5+ failures in 5 min)</title>
       <table>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
 | eval severity="critical"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
@@ -244,7 +226,7 @@
         <option name="wrap">true</option>
         <option name="rowNumbers">true</option>
         <format type="color" field="Threat Level">
-          <colorPalette type="map">{"Critical":#dc4e41,"High":#f1813f,"Medium":#f8be34}</colorPalette>
+          <colorPalette type="map">{"Critical":#dc2626,"High":#f59e0b,"Medium":#eab308}</colorPalette>
         </format>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dsecurity%20src_ip%3D$row.Source IP$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -253,16 +235,13 @@
     </panel>
   </row>
 
-  <!-- ============================================== -->
-  <!-- DETAILED ANALYSIS ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== DETAILED ANALYSIS ROW ==================== -->
   <row>
     <panel>
       <title>Top Failed Login Attempts by Source IP</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
 | eval severity="high"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
@@ -278,7 +257,7 @@
         <option name="charting.axisTitleX.text">Failed Attempts</option>
         <option name="charting.axisTitleY.text">Source IP</option>
         <option name="charting.chart.showDataLabels">all</option>
-        <option name="charting.seriesColors">[0xdc4e41]</option>
+        <option name="charting.seriesColors">[0xdc2626]</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dsecurity%20$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -289,8 +268,7 @@
       <title>Most Targeted User Accounts</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) ("Failed password" OR "Invalid user")
 | eval severity="high"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "(?i)(failed password|invalid user)\s+for\s+(invalid user\s+)?(?&lt;user&gt;\S+)"
@@ -303,7 +281,7 @@
           <refreshType>delay</refreshType>
         </search>
         <option name="charting.chart">pie</option>
-        <option name="charting.seriesColors">[0xdc4e41,0xf1813f,0xf8be34,0xf8dc3d,0x53a051,0x6DB7C6,0x3C6EB4,0xAC8EC1,0xCE5BA3,0xB86248]</option>
+        <option name="charting.seriesColors">[0xdc2626,0xf59e0b,0xeab308,0x10b981,0x3b82f6,0x8b5cf6,0xec4899,0x06b6d4]</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dsecurity%20user%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -312,16 +290,13 @@
     </panel>
   </row>
 
-  <!-- ============================================== -->
-  <!-- SUDO ACTIVITY ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== SUDO ACTIVITY ROW ==================== -->
   <row>
     <panel>
       <title>Recent Sudo Commands (Privileged Access)</title>
       <table>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog) "sudo"
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog) "sudo"
 | eval severity="medium"
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | rex field=_raw "sudo:\s+(?&lt;user&gt;\S+)\s+:\s+TTY=(?&lt;tty&gt;\S+)\s+;\s+PWD=(?&lt;pwd&gt;\S+)\s+;\s+USER=(?&lt;target_user&gt;\S+)\s+;\s+COMMAND=(?&lt;command&gt;.*)"
@@ -344,21 +319,17 @@
     </panel>
   </row>
 
-  <!-- ============================================== -->
-  <!-- SECURITY INTELLIGENCE ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== SECURITY INTELLIGENCE ROW ==================== -->
   <row>
     <panel>
       <title>Authentication Activity by Host</title>
       <chart>
         <search>
-          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
-(sourcetype=linux_secure OR sourcetype=syslog)
+          <query>index=security host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$ (sourcetype=linux_secure OR sourcetype=syslog)
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | timechart span=10m count by host limit=10</query>
@@ -386,8 +357,7 @@
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | stats count by sourcetype
@@ -407,9 +377,7 @@
     </panel>
   </row>
 
-  <!-- ============================================== -->
-  <!-- RAW EVENTS ROW -->
-  <!-- ============================================== -->
+  <!-- ==================== RAW EVENTS ROW ==================== -->
   <row>
     <panel>
       <title>Recent Security Events (Live Feed)</title>
@@ -419,8 +387,7 @@
 | eval severity=case(
     match(_raw, "(?i)(brute|attack|exploit|intrusion|unauthorized)"), "critical",
     match(_raw, "(?i)(failed password|invalid user|authentication failure|denied)"), "high",
-    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium",
-    1=1, "low"
+    match(_raw, "(?i)(sudo|session opened|session closed)"), "medium", 1=1, "low"
 )
 | where severity="$severity_filter$" OR "$severity_filter$"="*"
 | head 100</query>

@@ -1,0 +1,10 @@
+level,level_name,severity,color
+trace,Trace,1,#6699CC
+debug,Debug,2,#6699CC
+info,Info,3,#53A051
+warn,Warning,4,#F8BE34
+warning,Warning,4,#F8BE34
+error,Error,5,#DC4E41
+fatal,Fatal,6,#B83C32
+critical,Critical,6,#B83C32
+

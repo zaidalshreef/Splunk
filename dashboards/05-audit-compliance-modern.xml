@@ -1,11 +1,9 @@
 <form version="1.1" theme="dark">
     <label>Audit &amp; Compliance Command Center</label>
-    <description>System Auditing, Command Execution Tracking, File Changes, and Compliance Monitoring</description>
+    <description>System Auditing • Command Execution • File Changes • Compliance Monitoring</description>
 
-    <!-- ============================================== -->
-    <!-- GLOBAL SETTINGS -->
-    <!-- ============================================== -->
-    <fieldset submitButton="true" autoRun="true">
+    <!-- ==================== GLOBAL SETTINGS ==================== -->
+    <fieldset submitButton="false" autoRun="true">
         <input type="time" token="time" searchWhenChanged="true">
             <label>Time Range</label>
             <default>
@@ -40,102 +38,100 @@
         </input>
     </fieldset>
 
-    <!-- ============================================== -->
-    <!-- KEY METRICS ROW -->
-    <!-- ============================================== -->
+    <!-- ==================== KEY METRICS ROW ==================== -->
     <row>
         <panel>
-            <title> Total Audit Events</title>
+            <title>TOTAL AUDIT EVENTS</title>
             <single>
                 <search>
                     <query>index=security sourcetype=linux_audit host=$host_filter$ audit_type=$audit_type_filter$ earliest=$time.earliest$ latest=$time.latest$
-| stats count</query>
+| stats count
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">all</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x3b82f6","0x3b82f6","0x3b82f6"]</option>
                 <option name="underLabel">Audit Records</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
                 </drilldown>
             </single>
         </panel>
         <panel>
-            <title> Command Executions</title>
+            <title>COMMAND EXECUTIONS</title>
             <single>
                 <search>
                     <query>index=security sourcetype=linux_audit host=$host_filter$ (audit_type="EXECVE" OR "type=EXECVE") earliest=$time.earliest$ latest=$time.latest$
-| stats count</query>
+| stats count
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">all</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x10b981","0x10b981","0x10b981"]</option>
                 <option name="underLabel">EXECVE Events</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20EXECVE&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
                 </drilldown>
             </single>
         </panel>
         <panel>
-            <title> File Access Events</title>
+            <title>FILE ACCESS EVENTS</title>
             <single>
                 <search>
                     <query>index=security sourcetype=linux_audit host=$host_filter$ (audit_type="PATH" OR "type=PATH") earliest=$time.earliest$ latest=$time.latest$
-| stats count</query>
+| stats count
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">all</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0xf59e0b","0xf59e0b","0xf59e0b"]</option>
                 <option name="underLabel">File Operations</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20PATH&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
                 </drilldown>
             </single>
         </panel>
         <panel>
-            <title> User Activity</title>
+            <title>USER ACTIVITY</title>
             <single>
                 <search>
                     <query>index=security sourcetype=linux_audit host=$host_filter$ (audit_type="USER_*" OR "type=USER_") earliest=$time.earliest$ latest=$time.latest$
-| stats dc(uid) as unique_users</query>
+| stats dc(uid) as unique_users
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">none</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x8b5cf6","0x8b5cf6","0x8b5cf6"]</option>
                 <option name="underLabel">Unique Users</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
             </single>
         </panel>
         <panel>
-            <title> Active Hosts</title>
+            <title>ACTIVE HOSTS</title>
             <single>
                 <search>
                     <query>index=security sourcetype=linux_audit earliest=$time.earliest$ latest=$time.latest$
-| stats dc(host) as active_hosts</query>
+| stats dc(host) as active_hosts
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">none</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x06b6d4","0x06b6d4","0x06b6d4"]</option>
                 <option name="underLabel">Audited Systems</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
             </single>
         </panel>
     </row>
@@ -169,7 +165,7 @@
                 <option name="charting.axisTitleX.visibility">collapsed</option>
                 <option name="charting.axisTitleY.text">Events</option>
                 <option name="charting.legend.placement">bottom</option>
-                <option name="charting.fieldColors">{"Command Execution":"#6DB7C6","File Access":"#f8be34","User Activity":"#53a051","System Calls":"#AE8EC1","Credentials":"#f1813f","Other":"#6c757d"}</option>
+                <option name="charting.fieldColors">{"Command Execution":"#3b82f6","File Access":"#f59e0b","User Activity":"#10b981","System Calls":"#8b5cf6","Credentials":"#ec4899","Other":"#64748b"}</option>
                 <option name="drilldown">all</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
@@ -211,7 +207,7 @@
                 <option name="rowNumbers">true</option>
                 <option name="dataOverlayMode">heatmap</option>
                 <format type="color" field="Risk">
-                    <colorPalette type="map">{" High":#dc4e41," Medium":#f8be34," Normal":#53a051}</colorPalette>
+                    <colorPalette type="map">{" High":#dc2626," Medium":#f59e0b," Normal":#10b981}</colorPalette>
                 </format>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20EXECVE%20$row.Command$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -253,7 +249,7 @@
                 <option name="wrap">true</option>
                 <option name="rowNumbers">true</option>
                 <format type="color" field="Severity">
-                    <colorPalette type="map">{" Critical":#dc4e41," High":#f1813f,"🟡 Medium":#f8be34}</colorPalette>
+                    <colorPalette type="map">{" Critical":#dc2626," High":#f59e0b,"🟡 Medium":#eab308}</colorPalette>
                 </format>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20%22$row.File Path$%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -292,7 +288,7 @@
                 <option name="wrap">true</option>
                 <option name="rowNumbers">true</option>
                 <format type="color" field="Status">
-                    <colorPalette type="map">{" Complete":#53a051,"🟡 Active":#f8be34," Ended":#6c757d}</colorPalette>
+                    <colorPalette type="map">{" Complete":#10b981,"🟡 Active":#f59e0b," Ended":#64748b}</colorPalette>
                 </format>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20uid%3D$row.UID$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -336,7 +332,7 @@
                 <option name="wrap">true</option>
                 <option name="rowNumbers">true</option>
                 <format type="color" field="Risk">
-                    <colorPalette type="map">{" Critical":#dc4e41," High":#f1813f,"🟡 Medium":#f8be34," Normal":#53a051}</colorPalette>
+                    <colorPalette type="map">{" Critical":#dc2626," High":#f59e0b,"🟡 Medium":#eab308," Normal":#10b981}</colorPalette>
                 </format>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20sudo%20$row.Command$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -425,7 +421,7 @@
                 <option name="charting.axisTitleX.text">Events</option>
                 <option name="charting.axisTitleY.text">Host</option>
                 <option name="charting.chart.showDataLabels">all</option>
-                <option name="charting.seriesColors">[0x6DB7C6]</option>
+                <option name="charting.seriesColors">[0x3b82f6]</option>
                 <option name="drilldown">all</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Dsecurity%20sourcetype%3Dlinux_audit%20host%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>

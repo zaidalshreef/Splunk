@@ -1,0 +1,454 @@
+# =============================================================================
+# BookingApp Production Stack with APM-like Monitoring
+# Traefik Load Balancer • 3x NestJS API Replicas • NextJS • Redis • PostgreSQL
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # TRAEFIK - Reverse Proxy & Load Balancer with Access Logging
+  # ===========================================================================
+  traefik:
+    image: traefik:v3.2
+    container_name: bookingapp-traefik
+    hostname: traefik
+    restart: unless-stopped
+    command:
+      # API and Dashboard
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      # Docker provider
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=bookingapp-network"
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.api.address=:5000"
+      # Access Logs (JSON format with full request/response details)
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--accesslog.format=json"
+      - "--accesslog.fields.defaultmode=keep"
+      - "--accesslog.fields.names.ClientUsername=drop"
+      - "--accesslog.fields.headers.defaultmode=keep"
+      - "--accesslog.fields.headers.names.User-Agent=keep"
+      - "--accesslog.fields.headers.names.X-Request-ID=keep"
+      - "--accesslog.fields.headers.names.X-Correlation-ID=keep"
+      - "--accesslog.fields.headers.names.X-Trace-ID=keep"
+      # Traefik Logs
+      - "--log.level=INFO"
+      - "--log.filepath=/var/log/traefik/traefik.log"
+      - "--log.format=json"
+      # Metrics (Prometheus format)
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
+      - "--metrics.prometheus.addEntryPointsLabels=true"
+      - "--metrics.prometheus.addServicesLabels=true"
+    ports:
+      - "80:80"
+      - "5000:5000"
+      - "8080:8080"  # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs/traefik:/var/log/traefik
+    networks:
+      - bookingapp-network
+    labels:
+      service: "traefik"
+      app: "bookingapp"
+      component: "loadbalancer"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service,app,component"
+
+  # ===========================================================================
+  # NEXTJS - Frontend Web Application
+  # ===========================================================================
+  web:
+    build:
+      context: ${BUILD_CONTEXT:-.}
+      dockerfile: ${NEXTJS_DOCKERFILE:-./nextjs}
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000
+        SKIP_ENV_VALIDATION: 1
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    environment:
+      - NODE_ENV=production
+      - SKIP_ENV_VALIDATION=1
+      - REDIS_URL=redis://redis:6379
+      - NODE_OPTIONS=--max-old-space-size=1536
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+      # Logging
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+    env_file:
+      - .env
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./logs/web:/app/logs
+    networks:
+      - bookingapp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.web.entrypoints=web"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
+      - "service=web"
+      - "app=bookingapp"
+      - "component=frontend"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service,app,component"
+
+  # ===========================================================================
+  # DATABASE MIGRATIONS
+  # ===========================================================================
+  migrate:
+    build:
+      context: ${BUILD_CONTEXT:-.}
+      dockerfile: ${NESTJS_DOCKERFILE:-./nestjs}
+    command: ["sh", "-c", "cd packages/database && npx prisma migrate deploy"]
+    environment:
+      - DATABASE_URL=postgresql://app:${POSTGRES_PASSWORD:-password}@postgres:5432/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - bookingapp-network
+    labels:
+      service: "migrate"
+      app: "bookingapp"
+      component: "database"
+
+  # ===========================================================================
+  # NESTJS API - 3 Replicas with Structured JSON Logging
+  # ===========================================================================
+  api:
+    build:
+      context: ${BUILD_CONTEXT:-.}
+      dockerfile: ${NESTJS_DOCKERFILE:-./nestjs}
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+      # Database
+      - DATABASE_URL=postgresql://app:${POSTGRES_PASSWORD:-password}@postgres:5432/app
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Logging - Structured JSON with APM fields
+      - NODE_ENV=production
+      - LOG_FORMAT=json
+      - LOG_LEVEL=info
+      - LOG_PRETTY=false
+      # APM/Tracing
+      - ENABLE_TRACING=true
+      - ENABLE_METRICS=true
+      - SERVICE_NAME=bookingapp-api
+      - SERVICE_VERSION=${VERSION:-1.0.0}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - ./logs/api:/app/logs
+    networks:
+      - bookingapp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.api.entrypoints=api"
+      - "traefik.http.services.api.loadbalancer.server.port=5000"
+      - "traefik.http.services.api.loadbalancer.healthcheck.path=/api/v1/health"
+      - "traefik.http.services.api.loadbalancer.healthcheck.interval=10s"
+      - "service=api"
+      - "app=bookingapp"
+      - "component=backend"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+        labels: "service,app,component"
+
+  # ===========================================================================
+  # POSTGRESQL - Primary Database with Query Logging
+  # ===========================================================================
+  postgres:
+    image: postgres:17
+    container_name: bookingapp-postgres
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: app
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./logs/postgres:/var/log/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    command:
+      - "postgres"
+      - "-c"
+      - "log_destination=jsonlog"
+      - "-c"
+      - "logging_collector=on"
+      - "-c"
+      - "log_directory=/var/log/postgresql"
+      - "-c"
+      - "log_filename=postgresql.json"
+      - "-c"
+      - "log_file_mode=0644"
+      - "-c"
+      - "log_rotation_age=1d"
+      - "-c"
+      - "log_rotation_size=100MB"
+      - "-c"
+      - "log_statement=all"
+      - "-c"
+      - "log_duration=on"
+      - "-c"
+      - "log_min_duration_statement=0"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+      - "-c"
+      - "log_lock_waits=on"
+      - "-c"
+      - "log_temp_files=0"
+      - "-c"
+      - "log_checkpoints=on"
+      - "-c"
+      - "log_line_prefix=%m [%p] %q%u@%d "
+      # Performance
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "effective_cache_size=512MB"
+      # Monitoring
+      - "-c"
+      - "track_activities=on"
+      - "-c"
+      - "track_counts=on"
+      - "-c"
+      - "track_io_timing=on"
+      - "-c"
+      - "track_functions=all"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - bookingapp-network
+    labels:
+      service: "postgres"
+      app: "bookingapp"
+      component: "database"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service,app,component"
+
+  # ===========================================================================
+  # REDIS - Cache & Session Store with Verbose Logging
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: bookingapp-redis
+    hostname: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./logs/redis:/var/log/redis
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --appendonly yes
+      --save 60 1000
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --maxclients 10000
+      --loglevel verbose
+      --logfile /var/log/redis/redis.log
+      --slowlog-log-slower-than 10000
+      --slowlog-max-len 128
+      --latency-monitor-threshold 100
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - bookingapp-network
+    labels:
+      service: "redis"
+      app: "bookingapp"
+      component: "cache"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service,app,component"
+
+  # ===========================================================================
+  # FLUENT BIT - Log Collector for Splunk
+  # ===========================================================================
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    container_name: bookingapp-fluent-bit
+    hostname: bookingapp
+    restart: unless-stopped
+    depends_on:
+      - traefik
+      - api
+      - web
+      - postgres
+      - redis
+    volumes:
+      # Docker container logs
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Application logs
+      - ./logs:/app/logs:ro
+      # Fluent Bit config
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      # System logs
+      - /var/log:/host/var/log:ro
+      # Proc filesystem for metrics
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    environment:
+      - SPLUNK_HOST=${SPLUNK_HOST:-10.10.10.114}
+      - SPLUNK_HEC_PORT=${SPLUNK_HEC_PORT:-8088}
+      - SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN:-your-hec-token}
+      - HOSTNAME=bookingapp
+    networks:
+      - bookingapp-network
+    labels:
+      service: "fluent-bit"
+      app: "bookingapp"
+      component: "logging"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
+  # NODE EXPORTER - System Metrics Collection
+  # ===========================================================================
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: bookingapp-node-exporter
+    hostname: node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.textfile.directory=/var/lib/node_exporter/textfile_collector'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - bookingapp-network
+    labels:
+      service: "node-exporter"
+      app: "bookingapp"
+      component: "metrics"
+
+  # ===========================================================================
+  # CADVISOR - Container Metrics Collection
+  # ===========================================================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: bookingapp-cadvisor
+    hostname: cadvisor
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - bookingapp-network
+    labels:
+      service: "cadvisor"
+      app: "bookingapp"
+      component: "metrics"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  bookingapp-network:
+    name: bookingapp-network
+    driver: bridge
+

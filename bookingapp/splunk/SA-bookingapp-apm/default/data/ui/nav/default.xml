@@ -1,0 +1,25 @@
+<nav color="#1a1a2e">
+    <view name="00-apm-overview" default="true"/>
+    <collection label="Performance">
+        <view name="02-endpoint-analysis"/>
+    </collection>
+    <collection label="Errors">
+        <view name="04-error-tracking"/>
+    </collection>
+    <collection label="Traces">
+        <view name="06-distributed-traces"/>
+        <view name="17-request-flow"/>
+    </collection>
+    <collection label="Dependencies">
+        <view name="08-database-performance"/>
+        <view name="09-cache-performance"/>
+    </collection>
+    <collection label="Infrastructure">
+        <view name="11-container-metrics"/>
+        <view name="12-host-metrics"/>
+    </collection>
+    <collection label="Security">
+        <view name="15-security-audit"/>
+    </collection>
+    <view name="search" />
+</nav>

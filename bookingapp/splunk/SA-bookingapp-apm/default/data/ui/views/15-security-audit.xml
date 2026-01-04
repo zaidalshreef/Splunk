@@ -1,0 +1,526 @@
+<form version="1.1" theme="dark">
+    <label>SECURITY AUDIT</label>
+    <description>Comprehensive Security Monitoring - Authentication - Privilege Escalation - File Access - Network - Threats</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-24h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+        <input type="dropdown" token="severity" searchWhenChanged="true">
+            <label>SEVERITY</label>
+            <choice value="*">All</choice>
+            <choice value="critical">Critical</choice>
+            <choice value="high">High</choice>
+            <choice value="medium">Medium</choice>
+            <default>*</default>
+        </input>
+    </fieldset>
+
+    <!-- SECURITY SCORE ROW -->
+    <row>
+        <panel>
+            <title>SECURITY SCORE</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp (sourcetype="linux_secure" OR sourcetype="linux_audit")
+| eval is_failed=if(match(_raw, "Failed|failure|Invalid"), 1, 0)
+| eval is_sudo=if(match(_raw, "sudo"), 1, 0)
+| eval is_root=if(match(_raw, "root"), 1, 0)
+| stats sum(is_failed) as failed_auth, count as total_events
+| eval score=round(100 - (failed_auth/total_events * 100), 0)
+| eval score=if(score&lt;0, 0, score)
+| fields score
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#DC4E41","#F8BE34","#53A051"]</option>
+                <option name="rangeValues">[60,80]</option>
+                <option name="useColors">1</option>
+                <option name="unit">/100</option>
+            </single>
+        </panel>
+        <panel>
+            <title>FAILED LOGINS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" ("Failed password" OR "authentication failure") | stats count as failed</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[5,20]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>BRUTE FORCE ATTEMPTS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="linux_secure" ("Failed password" OR "authentication failure")
+| bucket _time span=5m
+| stats count as attempts by _time
+| where attempts >= 5
+| stats count as brute_force_windows
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,3]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>SUDO COMMANDS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" "sudo" | stats count as sudo_count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34"]</option>
+                <option name="rangeValues">[100]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>SSH SESSIONS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" "sshd" "Accepted" | stats count as ssh_sessions</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>AUDIT EVENTS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_audit" | stats count as audit_events</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- SECURITY ALERTS ROW -->
+    <row>
+        <panel>
+            <title>CRITICAL SECURITY EVENTS</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp (sourcetype="linux_secure" OR sourcetype="linux_audit")
+| eval severity=case(
+    match(_raw, "Failed password.*root|FAILED.*root|Invalid user root"), "critical",
+    match(_raw, "Failed password|authentication failure|Invalid user"), "high",
+    match(_raw, "sudo.*FAILED|sudo.*NOT"), "critical",
+    match(_raw, "session opened.*root"), "medium",
+    match(_raw, "useradd|userdel|groupadd|groupdel"), "high",
+    match(_raw, "passwd|shadow|sudoers"), "critical",
+    1=1, "low"
+)
+| where severity!="low"
+| where severity="$severity$" OR "$severity$"="*"
+| eval time=strftime(_time, "%H:%M:%S")
+| eval event=case(
+    match(_raw, "Failed password"), "Failed Login",
+    match(_raw, "Invalid user"), "Invalid User",
+    match(_raw, "sudo.*FAILED"), "Sudo Failed",
+    match(_raw, "sudo.*COMMAND"), "Sudo Command",
+    match(_raw, "useradd"), "User Created",
+    match(_raw, "userdel"), "User Deleted",
+    match(_raw, "passwd|shadow"), "Password Change",
+    match(_raw, "session opened"), "Session Opened",
+    1=1, "Security Event"
+)
+| rex "user[=:\s]+(?&lt;user&gt;\w+)"
+| rex "from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
+| table time, severity, event, user, src_ip
+| sort -_time
+| head 50
+| rename time as "Time", severity as "Severity", event as "Event", user as "User", src_ip as "Source"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Severity">
+                    <colorPalette type="map">{"critical": #DC4E41, "high": #F8BE34, "medium": #6699CC}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Authentication Timeline -->
+    <row>
+        <panel>
+            <title>AUTHENTICATION TIMELINE</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure"
+| eval event_type=case(
+    match(_raw, "Accepted"), "Success",
+    match(_raw, "Failed|Invalid|failure"), "Failed",
+    match(_raw, "sudo"), "Sudo",
+    1=1, "Other")
+| timechart span=1h count by event_type</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Success": "#53A051", "Failed": "#DC4E41", "Sudo": "#F8BE34", "Other": "#6699CC"}</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>FAILED LOGINS BY SOURCE IP</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" ("Failed password" OR "authentication failure" OR "Invalid user")
+| rex "from (?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
+| stats count by src_ip
+| sort -count
+| head 10</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- Privilege Escalation -->
+    <row>
+        <panel>
+            <title>PRIVILEGE ESCALATION (SUDO COMMANDS)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" "sudo"
+| rex "sudo:\s+(?&lt;sudo_user&gt;\w+)\s+:.*USER=(?&lt;target_user&gt;\w+).*COMMAND=(?&lt;command&gt;.+)$"
+| eval time=strftime(_time, "%H:%M:%S")
+| eval vm=coalesce(host, "bookingapp")
+| eval risk=case(
+    match(command, "rm -rf|dd if=|mkfs|passwd|shadow|sudoers|chmod 777|chown root"), "high",
+    match(command, "apt|yum|pip|npm|curl|wget|bash|sh|python|perl|docker"), "medium",
+    1=1, "low"
+)
+| table time, sudo_user, target_user, vm, command, risk
+| sort -_time
+| head 100
+| rename time as "Time", sudo_user as "User", target_user as "Run As", vm as "VM", command as "Command", risk as "Risk"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">15</option>
+                <format type="color" field="Risk">
+                    <colorPalette type="map">{"high": #DC4E41, "medium": #F8BE34, "low": #53A051}</colorPalette>
+                </format>
+                <format type="color" field="Run As">
+                    <colorPalette type="map">{"root": #DC4E41}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- SSH Sessions -->
+    <row>
+        <panel>
+            <title>SSH AUTHENTICATION</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" "sshd" ("Accepted" OR "Failed" OR "Disconnected" OR "Invalid")
+| rex "(?&lt;auth_result&gt;Accepted|Failed|Disconnected|Invalid)\s+(?:password|publickey|user)?\s*(?:for\s*)?(?:invalid user\s+)?(?&lt;username&gt;\w+)?\s*from\s+(?&lt;src_ip&gt;\d+\.\d+\.\d+\.\d+)"
+| eval time=strftime(_time, "%H:%M:%S")
+| eval auth_result=coalesce(auth_result, "Unknown")
+| eval username=coalesce(username, "-")
+| table time, auth_result, username, src_ip
+| sort -_time
+| head 100
+| rename time as "Time", auth_result as "Result", username as "User", src_ip as "Source IP"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">15</option>
+                <format type="color" field="Result">
+                    <colorPalette type="map">{"Accepted": #53A051, "Failed": #DC4E41, "Disconnected": #6699CC, "Invalid": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>TOP SSH USERS</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" "sshd" "Accepted"
+| rex "for\s+(?&lt;username&gt;\w+)\s+from"
+| stats count by username
+| sort -count
+| head 10</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">bar</option>
+                <option name="charting.drilldown">none</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- File Access from Audit -->
+    <row>
+        <panel>
+            <title>SENSITIVE FILE ACCESS (AUDIT)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_audit" (type=PATH OR type=SYSCALL)
+| rex "name=\"(?&lt;filepath&gt;[^\"]+)\""
+| rex "comm=\"(?&lt;command&gt;[^\"]+)\""
+| rex "exe=\"(?&lt;executable&gt;[^\"]+)\""
+| eval is_sensitive=if(match(filepath, "/etc/passwd|/etc/shadow|/etc/sudoers|/root/|\.ssh/|\.bash_history|/var/log/"), 1, 0)
+| where is_sensitive=1
+| eval time=strftime(_time, "%H:%M:%S")
+| eval filename=if(isnull(filepath), "-", filepath)
+| table time, command, filename
+| sort -_time
+| head 50
+| rename time as "Time", command as "Command", filename as "File Accessed"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+            </table>
+        </panel>
+        <panel>
+            <title>COMMAND EXECUTION (AUDIT)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_audit" type=SYSCALL key="commands"
+| rex "UID=\"(?&lt;run_user&gt;[^\"]+)\""
+| rex "AUID=\"(?&lt;login_user&gt;[^\"]+)\""
+| rex "exe=\"(?&lt;exe_path&gt;[^\"]+)\""
+| rex "comm=\"(?&lt;command&gt;[^\"]+)\""
+| rex "cwd=\"(?&lt;cwd&gt;[^\"]+)\""
+| eval time=strftime(_time, "%H:%M:%S")
+| eval user=coalesce(run_user, "-")
+| eval login_as=coalesce(login_user, "-")
+| eval vm=coalesce(host, "bookingapp")
+| eval risk=case(
+    match(exe_path, "rm|dd|mkfs|passwd|shadow"), "high",
+    match(exe_path, "chmod|chown|iptables|systemctl|docker|apt|dpkg"), "medium",
+    1=1, "low"
+)
+| table time, user, login_as, vm, command, exe_path, risk
+| sort -_time
+| head 100
+| rename time as "Time", user as "Run As", login_as as "Login User", vm as "VM", command as "Command", exe_path as "Executable", risk as "Risk"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">15</option>
+                <format type="color" field="Risk">
+                    <colorPalette type="map">{"high": #DC4E41, "medium": #F8BE34, "low": #53A051}</colorPalette>
+                </format>
+                <format type="color" field="Run As">
+                    <colorPalette type="map">{"root": #DC4E41}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Network Connections -->
+    <row>
+        <panel>
+            <title>TOP NETWORK PORTS (BY CONNECTIONS)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="netstat_metrics" metric_type="netstat_ports" port!=""
+| stats latest(connection_count) as connections by port, host
+| eval service=case(
+    port="22", "SSH",
+    port="80", "HTTP",
+    port="443", "HTTPS",
+    port="5432", "PostgreSQL",
+    port="6379", "Redis",
+    port="3000", "Web App",
+    port="5000", "API",
+    port="8080", "NGINX Health",
+    1=1, "Other"
+)
+| sort -connections
+| head 20
+| rename port as "Port", host as "VM", connections as "Connections", service as "Service"</query>
+                    <earliest>-15m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Service">
+                    <colorPalette type="map">{"SSH": #F8BE34, "PostgreSQL": #6699CC, "Redis": #DC4E41, "API": #53A051, "Web App": #53A051}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>NETWORK SUMMARY</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="netstat_metrics" metric_type="netstat_summary"
+| stats latest(established) as Established, latest(listen) as Listening, latest(time_wait) as Time_Wait, latest(close_wait) as Close_Wait by host
+| rename host as "VM"</query>
+                    <earliest>-15m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+    </row>
+
+    <!-- User and System Changes -->
+    <row>
+        <panel>
+            <title>USER/GROUP CHANGES</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="linux_secure" (useradd OR userdel OR groupadd OR groupdel OR usermod OR passwd)
+| rex "(?&lt;action&gt;useradd|userdel|groupadd|groupdel|usermod|passwd)"
+| rex "name=(?&lt;target&gt;\w+)"
+| eval time=strftime(_time, "%H:%M:%S")
+| table time, action, target
+| sort -_time
+| head 50
+| rename time as "Time", action as "Action", target as "User/Group"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Action">
+                    <colorPalette type="map">{"useradd": #53A051, "userdel": #DC4E41, "groupadd": #6699CC, "groupdel": #F8BE34, "usermod": #F8BE34, "passwd": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>PACKAGE CHANGES</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="dpkg"
+| rex "^(?&lt;dpkg_time&gt;\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(?&lt;action&gt;\w+)\s+(?&lt;package&gt;[^\s:]+)"
+| table dpkg_time, action, package
+| sort -dpkg_time
+| head 50
+| rename dpkg_time as "Time", action as "Action", package as "Package"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Action">
+                    <colorPalette type="map">{"install": #53A051, "upgrade": #F8BE34, "remove": #DC4E41, "configure": #6699CC, "status": #999999}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Docker Security -->
+    <row>
+        <panel>
+            <title>DOCKER CONTAINER EVENTS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics"
+| eval time=strftime(_time, "%H:%M:%S")
+| stats latest(status) as status, latest(running) as running by container
+| eval health=case(
+    running="1", "Running",
+    status="exited", "Stopped",
+    1=1, status
+)
+| table container, health
+| rename container as "Container", health as "Status"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Status">
+                    <colorPalette type="map">{"Running": #53A051, "Stopped": #DC4E41, "Paused": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>CRON JOBS EXECUTED</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="syslog" CRON
+| rex "\((?&lt;cron_user&gt;\w+)\)\s+CMD\s+\((?&lt;cron_command&gt;[^)]+)\)"
+| eval time=strftime(_time, "%H:%M:%S")
+| table time, cron_user, cron_command
+| sort -_time
+| head 50
+| rename time as "Time", cron_user as "User", cron_command as "Command"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Current Sessions -->
+    <row>
+        <panel>
+            <title>CURRENT USER SESSIONS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="users_metrics" metric_type="user_session_detail"
+| stats latest(tty) as tty, latest(login_time) as login_time, latest(from) as from by user
+| sort user
+| rename user as "User", tty as "TTY", login_time as "Login Time", from as "From"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+        <panel>
+            <title>LOGGED IN USERS COUNT</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="users_metrics" metric_type="user_sessions"
+| timechart span=1h latest(logged_in_count) as "Users"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Users": "#53A051"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+    </row>
+</form>

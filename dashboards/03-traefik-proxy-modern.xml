@@ -1,11 +1,9 @@
 <form version="1.1" theme="dark">
-  <label> Traefik Proxy Command Center</label>
-  <description>HTTP Traffic Analysis, Response Times, Error Rates, and Client Analytics</description>
+  <label>Traefik Proxy Command Center</label>
+  <description>HTTP Traffic Analysis • Response Times • Error Rates • Client Analytics</description>
 
-  <!-- ============================================== -->
-  <!-- GLOBAL SETTINGS -->
-  <!-- ============================================== -->
-  <fieldset submitButton="true" autoRun="true">
+  <!-- ==================== GLOBAL SETTINGS ==================== -->
+  <fieldset submitButton="false" autoRun="true">
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time Range</label>
       <default>
@@ -40,49 +38,47 @@
   <!-- ============================================== -->
   <row>
     <panel>
-      <title> Total Requests</title>
+      <title>TOTAL REQUESTS</title>
       <single>
         <search>
           <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
-| stats count</query>
+| stats count
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x3b82f6","0x3b82f6","0x3b82f6"]</option>
         <option name="underLabel">HTTP Requests</option>
-        <option name="useColors">0</option>
-        <option name="numberPrecision">0</option>
-        <option name="unit">reqs</option>
+        <option name="useColors">1</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
         </drilldown>
       </single>
     </panel>
     <panel>
-      <title> Avg Response Time</title>
+      <title>AVG RESPONSE TIME</title>
       <single>
         <search>
           <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
 | stats avg(Duration) as avg_duration
-| eval avg_duration=round(avg_duration, 0)</query>
+| eval avg_duration=round(avg_duration, 0)
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">none</option>
-        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
-        <option name="rangeValues">[0,500,1000,2000]</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[500,1000]</option>
         <option name="underLabel">Milliseconds</option>
         <option name="useColors">1</option>
-        <option name="numberPrecision">0</option>
         <option name="unit">ms</option>
       </single>
     </panel>
     <panel>
-      <title> Success Rate</title>
+      <title>SUCCESS RATE</title>
       <single>
         <search>
           <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
@@ -93,11 +89,10 @@
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">none</option>
-        <option name="rangeColors">["0xdc4e41","0xf1813f","0xf8be34","0x53a051"]</option>
-        <option name="rangeValues">[0,90,95,99]</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0xdc2626","0xf59e0b","0x10b981"]</option>
+        <option name="rangeValues">[90,99]</option>
         <option name="underLabel">2xx Responses</option>
         <option name="useColors">1</option>
         <option name="numberPrecision">0.0</option>
@@ -105,7 +100,7 @@
       </single>
     </panel>
     <panel>
-      <title> Error Rate</title>
+      <title>ERROR RATE</title>
       <single>
         <search>
           <query>index=traefik sourcetype="traefik:access" RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
@@ -116,11 +111,10 @@
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">all</option>
-        <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
-        <option name="rangeValues">[0,1,5,10]</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+        <option name="rangeValues">[1,5]</option>
         <option name="underLabel">4xx/5xx Errors</option>
         <option name="useColors">1</option>
         <option name="numberPrecision">0.0</option>
@@ -131,20 +125,20 @@
       </single>
     </panel>
     <panel>
-      <title> Unique Clients</title>
+      <title>UNIQUE CLIENTS</title>
       <single>
         <search>
           <query>index=traefik sourcetype="traefik:access" DownstreamStatus=$status_filter$ RequestMethod=$method_filter$ earliest=$time.earliest$ latest=$time.latest$
-| stats dc(ClientAddr) as unique_clients</query>
+| stats dc(ClientAddr) as unique_clients
+| fillnull value=0</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
           <refresh>30s</refresh>
-          <refreshType>delay</refreshType>
         </search>
-        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x06b6d4","0x06b6d4","0x06b6d4"]</option>
         <option name="underLabel">IP Addresses</option>
-        <option name="useColors">0</option>
-        <option name="numberPrecision">0</option>
+        <option name="useColors">1</option>
       </single>
     </panel>
   </row>
@@ -168,7 +162,7 @@
         <option name="charting.axisTitleX.visibility">collapsed</option>
         <option name="charting.axisTitleY.text">Requests</option>
         <option name="charting.legend.placement">none</option>
-        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="charting.seriesColors">[0x3b82f6]</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
@@ -191,7 +185,7 @@
         <option name="charting.axisTitleY.text">Response Time (ms)</option>
         <option name="charting.legend.placement">bottom</option>
         <option name="charting.legend.labels">["Average","95th Percentile","Maximum"]</option>
-        <option name="charting.seriesColors">[0x53a051,0xf8be34,0xdc4e41]</option>
+        <option name="charting.seriesColors">[0x10b981,0xf59e0b,0xdc2626]</option>
         <option name="charting.chart.showMarkers">true</option>
         <option name="drilldown">all</option>
         <drilldown>
@@ -221,7 +215,7 @@
         </search>
         <option name="charting.chart">pie</option>
         <option name="charting.chart.showPercent">true</option>
-        <option name="charting.fieldColors">{"2xx Success":"#53a051","3xx Redirect":"#6DB7C6","4xx Client Error":"#f1813f","5xx Server Error":"#dc4e41","Other":"#6c757d"}</option>
+        <option name="charting.fieldColors">{"2xx Success":"#10b981","3xx Redirect":"#06b6d4","4xx Client Error":"#f59e0b","5xx Server Error":"#dc2626","Other":"#64748b"}</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -246,7 +240,7 @@
         <option name="charting.axisTitleX.visibility">collapsed</option>
         <option name="charting.axisTitleY.text">Requests</option>
         <option name="charting.legend.placement">bottom</option>
-        <option name="charting.fieldColors">{"2xx":"#53a051","3xx":"#6DB7C6","4xx":"#f1813f","5xx":"#dc4e41","Other":"#6c757d"}</option>
+        <option name="charting.fieldColors">{"2xx":"#10b981","3xx":"#06b6d4","4xx":"#f59e0b","5xx":"#dc2626","Other":"#64748b"}</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
@@ -280,7 +274,7 @@
         <option name="rowNumbers">true</option>
         <option name="dataOverlayMode">heatmap</option>
         <format type="color" field="Avg Response (ms)">
-          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <colorPalette type="minMidMax" minColor="#10b981" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
           <scale type="minMidMax" minValue="0" midValue="500" maxValue="2000"></scale>
         </format>
         <drilldown>
@@ -311,7 +305,7 @@
         <option name="charting.axisTitleX.text">Requests</option>
         <option name="charting.axisTitleY.text">Client IP</option>
         <option name="charting.chart.showDataLabels">all</option>
-        <option name="charting.seriesColors">[0x6DB7C6]</option>
+        <option name="charting.seriesColors">[0x3b82f6]</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20ClientAddr%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -332,7 +326,7 @@
         </search>
         <option name="charting.chart">pie</option>
         <option name="charting.chart.showPercent">true</option>
-        <option name="charting.seriesColors">[0x6DB7C6,0x53a051,0xf8be34,0xAC8EC1,0xCE5BA3,0xB86248]</option>
+        <option name="charting.seriesColors">[0x3b82f6,0x10b981,0xf59e0b,0x8b5cf6,0xec4899,0x06b6d4]</option>
         <option name="drilldown">all</option>
         <drilldown>
           <link target="_blank">/app/search/search?q=index%3Dtraefik%20sourcetype%3D%22traefik%3Aaccess%22%20RequestMethod%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -365,10 +359,10 @@
         <option name="wrap">true</option>
         <option name="rowNumbers">true</option>
         <format type="color" field="Type">
-          <colorPalette type="map">{" Server Error":#dc4e41," Client Error":#f1813f}</colorPalette>
+          <colorPalette type="map">{" Server Error":#dc2626," Client Error":#f59e0b}</colorPalette>
         </format>
         <format type="color" field="Status">
-          <colorPalette type="minMidMax" minColor="#f1813f" midColor="#f1813f" maxColor="#dc4e41"></colorPalette>
+          <colorPalette type="minMidMax" minColor="#f59e0b" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
           <scale type="minMidMax" minValue="400" midValue="450" maxValue="500"></scale>
         </format>
         <drilldown>
@@ -402,15 +396,15 @@
         <option name="wrap">true</option>
         <option name="rowNumbers">true</option>
         <format type="color" field="Avg (ms)">
-          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <colorPalette type="minMidMax" minColor="#10b981" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
           <scale type="minMidMax" minValue="0" midValue="500" maxValue="2000"></scale>
         </format>
         <format type="color" field="P95 (ms)">
-          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <colorPalette type="minMidMax" minColor="#10b981" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
           <scale type="minMidMax" minValue="0" midValue="1000" maxValue="3000"></scale>
         </format>
         <format type="color" field="Max (ms)">
-          <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+          <colorPalette type="minMidMax" minColor="#10b981" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
           <scale type="minMidMax" minValue="0" midValue="2000" maxValue="5000"></scale>
         </format>
         <drilldown>

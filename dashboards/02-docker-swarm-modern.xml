@@ -1,11 +1,9 @@
 <form version="1.1" theme="dark">
-    <label> Docker Swarm Command Center</label>
-    <description>Container Health, Performance Metrics, Swarm Orchestration, and Resource Utilization</description>
+    <label>Docker Swarm Command Center</label>
+    <description>Container Health • Performance Metrics • Swarm Orchestration • Resource Utilization</description>
 
-    <!-- ============================================== -->
-    <!-- GLOBAL SETTINGS -->
-    <!-- ============================================== -->
-    <fieldset submitButton="true" autoRun="true">
+    <!-- ==================== GLOBAL SETTINGS ==================== -->
+    <fieldset submitButton="false" autoRun="true">
         <input type="time" token="time" searchWhenChanged="true">
             <label>Time Range</label>
             <default>
@@ -47,110 +45,109 @@
     <!-- ============================================== -->
     <row>
         <panel>
-            <title> Healthy Containers</title>
+            <title>HEALTHY CONTAINERS</title>
             <single>
                 <search>
                     <query>index=docker sourcetype="docker:metrics" event_type="docker_container" host=$host_filter$ container_name=$container_filter$ earliest=$time.earliest$ latest=$time.latest$
 | dedup container_id sortby -_time
 | search health="healthy" OR health="null" status="running"
-| stats count</query>
+| stats count
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">all</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x10b981","0x10b981","0x10b981"]</option>
                 <option name="underLabel">Running</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20health%3Dhealthy&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
                 </drilldown>
             </single>
         </panel>
         <panel>
-            <title> Unhealthy/Stopped</title>
+            <title>UNHEALTHY / STOPPED</title>
             <single>
                 <search>
                     <query>index=docker sourcetype="docker:metrics" event_type="docker_container" host=$host_filter$ container_name=$container_filter$ earliest=$time.earliest$ latest=$time.latest$
 | dedup container_id sortby -_time
 | search (health="unhealthy" OR status!="running")
-| stats count</query>
+| stats count
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">all</option>
-                <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
                 <option name="rangeValues">[0,1]</option>
                 <option name="underLabel">Need Attention</option>
                 <option name="useColors">1</option>
-                <option name="numberPrecision">0</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20unhealthy&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
                 </drilldown>
             </single>
         </panel>
         <panel>
-            <title> Swarm Nodes</title>
+            <title>SWARM NODES</title>
             <single>
                 <search>
                     <query>index=docker sourcetype="docker:metrics" event_type="docker_swarm_node" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 | dedup node_id sortby -_time
 | search status="ready"
-| stats count</query>
+| stats count
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">all</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x3b82f6","0x3b82f6","0x3b82f6"]</option>
                 <option name="underLabel">Ready Nodes</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20event_type%3D%22docker_swarm_node%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
                 </drilldown>
             </single>
         </panel>
         <panel>
-            <title> Swarm Services</title>
+            <title>SWARM SERVICES</title>
             <single>
                 <search>
                     <query>index=docker sourcetype="docker:metrics" event_type="docker_swarm_service" host=$host_filter$ earliest=$time.earliest$ latest=$time.latest$
 | dedup service_id sortby -_time
-| stats count</query>
+| stats count
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">all</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x8b5cf6","0x8b5cf6","0x8b5cf6"]</option>
                 <option name="underLabel">Active Services</option>
-                <option name="useColors">0</option>
-                <option name="numberPrecision">0</option>
+                <option name="useColors">1</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20event_type%3D%22docker_swarm_service%22&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
                 </drilldown>
             </single>
         </panel>
         <panel>
-            <title> Avg Restart Count</title>
+            <title>AVG RESTART COUNT</title>
             <single>
                 <search>
                     <query>index=docker sourcetype="docker:metrics" event_type="docker_container" host=$host_filter$ container_name=$container_filter$ earliest=$time.earliest$ latest=$time.latest$
 | dedup container_id sortby -_time
 | stats avg(restart_count) as avg_restarts
-| eval avg_restarts=round(avg_restarts, 1)</query>
+| eval avg_restarts=round(avg_restarts, 1)
+| fillnull value=0</query>
                     <earliest>$time.earliest$</earliest>
                     <latest>$time.latest$</latest>
                     <refresh>30s</refresh>
-                    <refreshType>delay</refreshType>
                 </search>
-                <option name="drilldown">none</option>
-                <option name="rangeColors">["0x53a051","0xf8be34","0xf1813f","0xdc4e41"]</option>
-                <option name="rangeValues">[0,5,10,20]</option>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["0x10b981","0xf59e0b","0xdc2626"]</option>
+                <option name="rangeValues">[5,10]</option>
                 <option name="underLabel">Restarts</option>
                 <option name="useColors">1</option>
                 <option name="numberPrecision">0.0</option>
@@ -180,7 +177,7 @@
                 <option name="charting.axisTitleX.visibility">collapsed</option>
                 <option name="charting.axisTitleY.text">Containers</option>
                 <option name="charting.legend.placement">bottom</option>
-                <option name="charting.fieldColors">{"running-healthy":"#53a051","running-no_healthcheck":"#6DB7C6","running-starting":"#f8be34","running-unhealthy":"#dc4e41","exited-null":"#6c757d"}</option>
+                <option name="charting.fieldColors">{"running-healthy":"#10b981","running-no_healthcheck":"#06b6d4","running-starting":"#f59e0b","running-unhealthy":"#dc2626","exited-null":"#64748b"}</option>
                 <option name="drilldown">all</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20earliest%3D$click.value$&amp;latest=$click.value2$</link>
@@ -273,10 +270,10 @@
                 <option name="wrap">true</option>
                 <option name="rowNumbers">false</option>
                 <format type="color" field="State">
-                    <colorPalette type="map">{"ready":#53a051,"down":#dc4e41}</colorPalette>
+                    <colorPalette type="map">{"ready":#10b981,"down":#dc2626}</colorPalette>
                 </format>
                 <format type="color" field="Availability">
-                    <colorPalette type="map">{"active":#53a051,"drain":#f8be34,"pause":#f1813f}</colorPalette>
+                    <colorPalette type="map">{"active":#10b981,"drain":#f59e0b,"pause":#dc2626}</colorPalette>
                 </format>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Ametrics%22%20hostname%3D$row.Hostname$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -342,13 +339,13 @@
                 <option name="rowNumbers">true</option>
                 <option name="dataOverlayMode">none</option>
                 <format type="color" field="Status">
-                    <colorPalette type="map">{"running":#53a051,"exited":#6c757d,"created":#6DB7C6,"restarting":#f8be34,"paused":#f1813f,"dead":#dc4e41}</colorPalette>
+                    <colorPalette type="map">{"running":#10b981,"exited":#64748b,"created":#06b6d4,"restarting":#f59e0b,"paused":#8b5cf6,"dead":#dc2626}</colorPalette>
                 </format>
                 <format type="color" field="Health">
-                    <colorPalette type="map">{"healthy":#53a051,"starting":#f8be34,"unhealthy":#dc4e41,"N/A":#6c757d}</colorPalette>
+                    <colorPalette type="map">{"healthy":#10b981,"starting":#f59e0b,"unhealthy":#dc2626,"N/A":#64748b}</colorPalette>
                 </format>
                 <format type="color" field="Restarts">
-                    <colorPalette type="minMidMax" minColor="#53a051" midColor="#f8be34" maxColor="#dc4e41"></colorPalette>
+                    <colorPalette type="minMidMax" minColor="#10b981" midColor="#f59e0b" maxColor="#dc2626"></colorPalette>
                     <scale type="minMidMax" minValue="0" midValue="10" maxValue="50"></scale>
                 </format>
                 <drilldown>
@@ -383,7 +380,7 @@
                 <option name="charting.axisTitleX.text">Average CPU %</option>
                 <option name="charting.axisTitleY.text">Container</option>
                 <option name="charting.chart.showDataLabels">all</option>
-                <option name="charting.seriesColors">[0x6DB7C6]</option>
+                <option name="charting.seriesColors">[0x3b82f6]</option>
                 <option name="drilldown">all</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Astats%22%20container_name%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>
@@ -411,7 +408,7 @@
                 <option name="charting.axisTitleX.text">Average Memory %</option>
                 <option name="charting.axisTitleY.text">Container</option>
                 <option name="charting.chart.showDataLabels">all</option>
-                <option name="charting.seriesColors">[0xAC8EC1]</option>
+                <option name="charting.seriesColors">[0x8b5cf6]</option>
                 <option name="drilldown">all</option>
                 <drilldown>
                     <link target="_blank">/app/search/search?q=index%3Ddocker%20sourcetype%3D%22docker%3Astats%22%20container_name%3D$click.name2$&amp;earliest=$time.earliest$&amp;latest=$time.latest$</link>

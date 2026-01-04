@@ -106,7 +106,7 @@ index=$index_token$ host=$host_token$ earliest=-1m latest=now
         <option name="unit">eps</option>
         <option name="useColors">1</option>
         <drilldown>
-          <link target="_blank">04-network-security-modern</link>
+          <link target="_blank">04-network-security</link>
         </drilldown>
       </single>
     </panel>
@@ -140,7 +140,7 @@ index=security
         <option name="unit">pts</option>
         <option name="useColors">1</option>
         <drilldown>
-          <link target="_blank">01-security-overview-modern</link>
+          <link target="_blank">01-security-overview</link>
         </drilldown>
       </single>
     </panel>
@@ -172,7 +172,7 @@ index=docker sourcetype=docker:metrics event_type=docker_container host=$host_to
         <option name="underLabel">Active Containers • Swarm Health</option>
         <option name="useColors">1</option>
         <drilldown>
-          <link target="_blank">02-docker-swarm-modern</link>
+          <link target="_blank">02-docker-swarm</link>
         </drilldown>
       </single>
     </panel>

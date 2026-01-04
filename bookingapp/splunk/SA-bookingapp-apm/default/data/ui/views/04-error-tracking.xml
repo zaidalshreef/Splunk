@@ -1,0 +1,315 @@
+<form version="1.1" theme="dark">
+    <label>ERROR TRACKING</label>
+    <description>Error Analysis - Stack Traces - Error Trends - Affected Endpoints</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-4h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+        <input type="dropdown" token="level" searchWhenChanged="true">
+            <label>LOG LEVEL</label>
+            <choice value="*">All Error Levels</choice>
+            <choice value="error">Error</choice>
+            <choice value="fatal">Fatal</choice>
+            <choice value="warn">Warning</choice>
+            <default>*</default>
+        </input>
+    </fieldset>
+
+    <!-- Error Summary -->
+    <row>
+        <panel>
+            <title>TOTAL ERRORS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| where level="$level$" OR "$level$"="*"
+| stats count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[10,100]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>HTTP 4XX ERRORS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=400 AND status_num&lt;500
+| stats count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[10,100]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>HTTP 5XX ERRORS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=500
+| stats count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,10]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>AFFECTED TRACES</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal) traceId=*
+| where level="$level$" OR "$level$"="*"
+| stats dc(traceId) as affected
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[10,50]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- Error Trend -->
+    <row>
+        <panel>
+            <title>ERROR TREND OVER TIME</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| where level="$level$" OR "$level$"="*"
+| timechart span=5m count by level
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"error": "#DC4E41", "fatal": "#B83C32", "warn": "#F8BE34"}</option>
+                <option name="charting.legend.placement">bottom</option>
+                <option name="height">300</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>HTTP ERROR CODES OVER TIME</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=400
+| eval error_group=if(status_num&lt;500, "4xx Client Error", "5xx Server Error")
+| timechart span=5m count by error_group
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"4xx Client Error": "#F8BE34", "5xx Server Error": "#DC4E41"}</option>
+                <option name="height">300</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- Top Errors -->
+    <row>
+        <panel>
+            <title>TOP ERROR MESSAGES</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| where level="$level$" OR "$level$"="*"
+| eval error_msg=substr(message, 1, 100)
+| stats count, dc(traceId) as traces, latest(_time) as last_seen, earliest(_time) as first_seen by level, error_msg
+| eval last_seen=strftime(last_seen, "%Y-%m-%d %H:%M:%S"), first_seen=strftime(first_seen, "%Y-%m-%d %H:%M:%S")
+| sort -count
+| head 20
+| rename level as "Level", error_msg as "Message", count as "Occurrences", traces as "Traces", last_seen as "Last Seen", first_seen as "First Seen"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <format type="color" field="Occurrences">
+                    <colorPalette type="minMidMax" minColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+                </format>
+                <format type="color" field="Level">
+                    <colorPalette type="map">{"error": #DC4E41, "fatal": #B83C32, "warn": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Affected Endpoints and By Service -->
+    <row>
+        <panel>
+            <title>AFFECTED ENDPOINTS</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| where level="$level$" OR "$level$"="*"
+| eval endpoint=coalesce('http.request.url', "-")
+| eval method=coalesce('http.request.method', "-")
+| where endpoint!="-"
+| stats count as errors by method, endpoint
+| sort -errors
+| head 20
+| rename method as "Method", endpoint as "Endpoint", errors as "Errors"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <format type="color" field="Errors">
+                    <colorPalette type="minMidMax" minColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">02-endpoint-analysis?form.endpoint=$row.Endpoint$</link>
+                </drilldown>
+            </table>
+        </panel>
+        <panel>
+            <title>BY SERVICE</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| where level="$level$" OR "$level$"="*"
+| eval service=coalesce('metadata.service', "unknown")
+| stats count by service
+| sort -count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="height">300</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- HTTP Errors by Endpoint -->
+    <row>
+        <panel>
+            <title>HTTP ERROR ENDPOINTS (NGINX)</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=400
+| stats count as errors, dc(request_id) as requests by method, uri, http_status
+| sort -errors
+| head 20
+| rename method as "Method", uri as "Endpoint", http_status as "Status", errors as "Errors", requests as "Requests"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <format type="color" field="Errors">
+                    <colorPalette type="minMidMax" minColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+                </format>
+                <format type="color" field="Status">
+                    <colorPalette type="expression">if(tonumber(value) >= 500, "#DC4E41", "#F8BE34")</colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">02-endpoint-analysis?form.endpoint=$row.Endpoint$</link>
+                </drilldown>
+            </table>
+        </panel>
+        <panel>
+            <title>ERROR LEVEL DISTRIBUTION</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| stats count by level
+| sort -count
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"error": "#DC4E41", "fatal": "#B83C32", "warn": "#F8BE34"}</option>
+                <option name="height">300</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- Recent Errors with Stack Traces -->
+    <row>
+        <panel>
+            <title>RECENT ERROR EVENTS (with Stack Traces)</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| where level="$level$" OR "$level$"="*"
+| eval time=strftime(_time, "%H:%M:%S")
+| eval service=coalesce('metadata.service', "unknown")
+| eval error_name=coalesce('error.name', level)
+| eval error_msg=coalesce(message, "-")
+| eval endpoint=coalesce('http.request.url', "-")
+| eval trace=coalesce(traceId, "-")
+| eval stack=coalesce('error.stack', "-")
+| table time, service, error_name, error_msg, endpoint, trace, stack
+| sort -_time
+| head 100
+| rename time as "Time", service as "Service", error_name as "Error", error_msg as "Message", endpoint as "Endpoint", trace as "Trace ID", stack as "Stack Trace"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <option name="wrap">true</option>
+                <option name="count">20</option>
+                <format type="color" field="Error">
+                    <colorPalette type="map">{"error": #DC4E41, "fatal": #B83C32, "warn": #F8BE34}</colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">17-request-flow?form.request_id=$row.Trace ID$</link>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+</form>

@@ -1,0 +1,580 @@
+<form version="1.1" theme="dark">
+    <label>APM OVERVIEW</label>
+    <description>Application Performance Monitoring - Real-time Service Health - Error Tracking</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-1h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+    </fieldset>
+
+    <!-- KEY METRICS ROW 1 - Transactions & Performance -->
+    <row>
+        <panel>
+            <title>TOTAL TRANSACTIONS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| stats count as total
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#53A051"]</option>
+                <option name="useColors">1</option>
+                <option name="numberPrecision">0</option>
+            </single>
+        </panel>
+        <panel>
+            <title>REQUEST RATE</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| stats count as total, min(_time) as first_event, max(_time) as last_event
+| eval time_span_sec=last_event-first_event
+| eval time_span_sec=if(time_span_sec&lt;60, 60, time_span_sec)
+| eval rate_per_min=round(total/(time_span_sec/60), 1)
+| eval rate_per_hour=round(total/(time_span_sec/3600), 1)
+| eval rate_per_day=round(total/(time_span_sec/86400), 1)
+| eval display=case(
+    time_span_sec&lt;=3600, rate_per_min." /min",
+    time_span_sec&lt;=86400, rate_per_hour." /hr",
+    1=1, rate_per_day." /day"
+)
+| fields display
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>ERROR RATE</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| stats count as total, 
+    sum(eval(if(tonumber(http_status)>=400, 1, 0))) as all_errors,
+    sum(eval(if(tonumber(http_status)>=500, 1, 0))) as server_errors
+| eval error_rate=if(total>0, round((all_errors/total)*100, 2), 0)
+| fields error_rate
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[5,20]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>AVG LATENCY</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval latency_ms=tonumber(request_time)*1000
+| stats avg(latency_ms) as avg_latency
+| eval avg_latency=round(avg_latency, 0)
+| fields avg_latency
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[200,1000]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>P99 LATENCY</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval latency_ms=tonumber(request_time)*1000
+| stats perc99(latency_ms) as p99_latency
+| eval p99_latency=round(p99_latency, 0)
+| fields p99_latency
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[500,2000]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>APDEX SCORE</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval latency_ms=tonumber(request_time)*1000
+| eval satisfied=if(latency_ms&lt;=100, 1, 0)
+| eval tolerating=if(latency_ms>100 AND latency_ms&lt;=400, 1, 0)
+| stats sum(satisfied) as sat, sum(tolerating) as tol, count as total
+| eval apdex=round((sat + (tol/2))/total, 2)
+| fields apdex
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#DC4E41","#F8BE34","#53A051"]</option>
+                <option name="rangeValues">[0.7,0.85]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- KEY METRICS ROW 2 - Infrastructure -->
+    <row>
+        <panel>
+            <title>HTTP 4xx ERRORS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json" http_status>=400 http_status&lt;500
+| stats count as errors
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[50,200]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>HTTP 5xx ERRORS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json" http_status>=500
+| stats count as errors
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,10]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>API EXCEPTIONS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="bookingapp:api:json" (level="error" OR level="fatal")
+| stats count as errors
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,10]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>CONTAINERS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" running=1
+| stats dc(container) as containers
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#DC4E41","#53A051"]</option>
+                <option name="rangeValues">[1]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>CPU USAGE</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="cpu_metrics" metric_type="cpu"
+| stats latest(cpu_percent) as cpu
+| eval cpu=round(cpu, 1)
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[70,90]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>MEMORY USAGE</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="memory_metrics" metric_type="memory"
+| stats latest(mem_percent) as mem
+| eval mem=round(mem, 1)
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[70,90]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- THROUGHPUT AND ERRORS TREND -->
+    <row>
+        <panel>
+            <title>REQUEST THROUGHPUT</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| timechart span=1m count as "Requests"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Requests": "#00D1B2"}</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>HTTP STATUS CODES</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval status_group=case(
+    tonumber(http_status)&lt;300, "2xx Success",
+    tonumber(http_status)&lt;400, "3xx Redirect",
+    tonumber(http_status)&lt;500, "4xx Client Error",
+    tonumber(http_status)>=500, "5xx Server Error",
+    1=1, "Unknown")
+| timechart span=5m count by status_group
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"2xx Success": "#53A051", "3xx Redirect": "#6699CC", "4xx Client Error": "#F8BE34", "5xx Server Error": "#DC4E41"}</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- LATENCY -->
+    <row>
+        <panel>
+            <title>LATENCY OVER TIME</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval latency_ms=tonumber(request_time)*1000
+| timechart span=1m avg(latency_ms) as "Avg", perc95(latency_ms) as "P95", perc99(latency_ms) as "P99"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.axisTitleY.text">Latency (ms)</option>
+                <option name="charting.fieldColors">{"Avg": "#53A051", "P95": "#F8BE34", "P99": "#DC4E41"}</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>UPSTREAM RESPONSE TIME</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json" upstream_response_time!="-"
+| eval upstream_ms=tonumber(upstream_response_time)*1000
+| timechart span=1m avg(upstream_ms) as "Upstream Avg" by upstream_addr limit=5
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.axisTitleY.text">Response Time (ms)</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- TOP ENDPOINTS AND ERRORS -->
+    <row>
+        <panel>
+            <title>TOP ENDPOINTS BY REQUESTS</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval latency_ms=tonumber(request_time)*1000
+| stats count as requests, avg(latency_ms) as avg_ms, perc99(latency_ms) as p99_ms, sum(eval(if(tonumber(http_status)>=500, 1, 0))) as errors by uri
+| eval error_rate=round((errors/requests)*100, 1)."%"
+| eval avg_ms=round(avg_ms, 0)."ms", p99_ms=round(p99_ms, 0)."ms"
+| sort -requests
+| head 15
+| rename uri as "Endpoint", requests as "Requests", avg_ms as "Avg", p99_ms as "P99", error_rate as "Errors"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Errors">
+                    <colorPalette type="expression">if(tonumber(replace(value, "%", "")) > 5, "#DC4E41", if(tonumber(replace(value, "%", "")) > 1, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>SLOWEST REQUESTS</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| eval latency_ms=round(tonumber(request_time)*1000, 1)
+| eval time=strftime(_time, "%H:%M:%S")
+| table time, method, uri, http_status, latency_ms
+| sort -latency_ms
+| head 10
+| rename time as "Time", method as "Method", uri as "Endpoint", http_status as "Status", latency_ms as "Latency (ms)"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <drilldown>
+                    <link target="_blank">02-endpoint-analysis?form.endpoint=$row.Endpoint$</link>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- LOAD BALANCING -->
+    <row>
+        <panel>
+            <title>LOAD BALANCING (UPSTREAM DISTRIBUTION)</title>
+            <chart>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json" upstream_addr!="-"
+| stats count as requests by upstream_addr
+| sort -requests
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="height">300</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>CONTAINER RESOURCE USAGE</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="docker_metrics" metric_type="docker" (container="api-*" OR container="web" OR container="nginx" OR container="postgres" OR container="redis")
+| stats latest(cpu_percent) as cpu, latest(mem_percent) as mem by container
+| eval cpu=round(cpu, 2), mem=round(mem, 2)
+| sort container
+| rename container as "Container", cpu as "CPU %", mem as "Memory %"
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="CPU %">
+                    <colorPalette type="expression">if(value > 50, "#DC4E41", if(value > 20, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+                <format type="color" field="Memory %">
+                    <colorPalette type="expression">if(value > 80, "#DC4E41", if(value > 50, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- DATABASE AND CACHE -->
+    <row>
+        <panel>
+            <title>POSTGRESQL STATUS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="postgresql:log" earliest=-5m
+| stats count as events
+| eval status=if(events>0, "Healthy", "No Data")
+| fields status
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#DC4E41","#53A051"]</option>
+                <option name="rangeValues">[0]</option>
+                <option name="useColors">0</option>
+            </single>
+        </panel>
+        <panel>
+            <title>REDIS STATUS</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="redis:log" earliest=-5m
+| stats count as events
+| eval status=if(events>0, "Healthy", "No Data")
+| fields status
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="useColors">0</option>
+            </single>
+        </panel>
+        <panel>
+            <title>SYSTEM MEMORY</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="memory_metrics" metric_type="memory"
+| stats latest(mem_percent) as mem
+| eval mem=round(mem, 1)
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[70,90]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>DISK USAGE (/)</title>
+            <single>
+                <search>
+                    <query>
+index=bookingapp sourcetype="disk_metrics" metric_type="disk" mount="/"
+| stats latest(use_percent) as disk
+| eval disk=round(disk, 1)
+                    </query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[70,90]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- HTTP ERROR SUMMARY -->
+    <row>
+        <panel>
+            <title>HTTP ERRORS BY ENDPOINT</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json" http_status>=400
+| stats count as errors, avg(request_time) as avg_time by uri, http_status
+| eval avg_ms=round(avg_time*1000, 1)
+| sort -errors
+| head 10
+| table uri, http_status, errors, avg_ms
+| rename uri as "Endpoint", http_status as "Status", errors as "Count", avg_ms as "Avg Latency (ms)"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <format type="color" field="Status">
+                    <colorPalette type="map">{"400": #F8BE34, "401": #F8BE34, "403": #F8BE34, "404": #F8BE34, "500": #DC4E41, "502": #DC4E41, "503": #DC4E41}</colorPalette>
+                </format>
+                <drilldown>
+                    <link target="_blank">02-endpoint-analysis?form.endpoint=$row.Endpoint$</link>
+                </drilldown>
+            </table>
+        </panel>
+        <panel>
+            <title>TOP CONSUMERS (BY REQUESTS)</title>
+            <table>
+                <search>
+                    <query>
+index=bookingapp sourcetype="nginx:access:json"
+| stats count as requests, avg(request_time) as avg_time by client_ip
+| eval avg_ms=round(avg_time*1000, 1)
+| sort -requests
+| head 10
+| table client_ip, requests, avg_ms
+| rename client_ip as "Client IP", requests as "Requests", avg_ms as "Avg Latency (ms)"
+                    </query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+    </row>
+</form>

@@ -1,0 +1,22 @@
+http_status,status_text,category,severity
+200,OK,success,1
+201,Created,success,1
+204,No Content,success,1
+301,Moved Permanently,redirect,2
+302,Found,redirect,2
+304,Not Modified,redirect,2
+400,Bad Request,client_error,3
+401,Unauthorized,client_error,3
+403,Forbidden,client_error,3
+404,Not Found,client_error,3
+405,Method Not Allowed,client_error,3
+408,Request Timeout,client_error,3
+409,Conflict,client_error,3
+422,Unprocessable Entity,client_error,3
+429,Too Many Requests,client_error,4
+500,Internal Server Error,server_error,5
+501,Not Implemented,server_error,5
+502,Bad Gateway,server_error,5
+503,Service Unavailable,server_error,5
+504,Gateway Timeout,server_error,5
+

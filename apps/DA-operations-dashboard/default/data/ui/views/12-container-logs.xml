@@ -1,7 +1,7 @@
 <form version="1.1" theme="dark">
   <label> Container Logs Command Center</label>
   <description>Real-time Container Log Analysis, Error Detection, and Log Stream Monitoring</description>
-  
+
   <!-- ============================================== -->
   <!-- GLOBAL SETTINGS -->
   <!-- ============================================== -->
@@ -36,7 +36,8 @@
       <search>
         <query>index=docker sourcetype="docker:container:json" earliest=-24h
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_name=coalesce(container_name, container_short_id)
 | stats count by container_short_id, container_name
 | sort -count</query>
@@ -221,8 +222,7 @@
 | where container_short_id="$container_filter$" OR "$container_filter$"="*"
 | eval log_level=case(
     match(_raw, "(?i)(ERROR|error|Exception|FATAL|fatal)") OR stream="stderr", "Error",
-    match(_raw, "(?i)(WARN|warn|Warning)"), "Warning",
-    1=1, "Other"
+    match(_raw, "(?i)(WARN|warn|Warning)"), "Warning", 1=1, "Other"
 )
 | search log_level!="Other"
 | timechart span=1m count by log_level</query>
@@ -255,7 +255,8 @@
         <search>
           <query>index=docker sourcetype="docker:container:json" host=$host_filter$ stream=$stream_filter$ earliest=$time.earliest$ latest=$time.latest$
 | rex field=source "\/var\/lib\/docker\/containers\/(?&lt;container_short_id&gt;[a-f0-9]{12})"
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | eval container_display=if(len(container_display)&gt;40, substr(container_display,1,37)."...", container_display)
 | stats count as log_events by container_display
@@ -292,17 +293,14 @@
 | spath input=_raw path=stream output=stream_type
 | spath input=_raw path=log output=log_msg
 | search stream_type=*
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | where match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr"
 | stats count as error_count by container_display, host
 | sort -error_count
 | head 15
-| eval severity=case(
-    error_count&gt;=100, " Critical",
-    error_count&gt;=50, " High",
-    error_count&gt;=10, "🟡 Medium",
-    1=1, " Low"
+| eval severity=case( error_count&gt;=100, " Critical", error_count&gt;=50, " High", error_count&gt;=10, "🟡 Medium", 1=1, " Low"
 )
 | table severity, container_display, host, error_count
 | rename severity as "Severity", container_display as "Container", host as "Host", error_count as "Error Count"</query>
@@ -365,8 +363,7 @@
     match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr", "ERROR",
     match(log_msg, "(?i)(WARN|Warning)"), "WARN",
     match(log_msg, "(?i)INFO"), "INFO",
-    match(log_msg, "(?i)DEBUG"), "DEBUG",
-    1=1, "OTHER"
+    match(log_msg, "(?i)DEBUG"), "DEBUG", 1=1, "OTHER"
 )
 | stats count by log_level
 | sort -count</query>
@@ -399,7 +396,8 @@
 | spath input=_raw path=stream output=stream_type
 | spath input=_raw path=log output=log_msg
 | search stream_type=*
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | where match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr"
 | eval log_msg_short=if(len(log_msg)&gt;150, substr(log_msg,1,147)."...", log_msg)
@@ -438,14 +436,14 @@
 | spath input=_raw path=stream output=stream_type
 | spath input=_raw path=log output=log_msg
 | search stream_type=*
-| eval container_name=container_short_id
+| lookup container_lookup.csv container_short_id OUTPUT container_name
+| eval container_name=coalesce(container_name, container_short_id)
 | eval container_display=coalesce(container_name, container_short_id)
 | eval log_level=case(
     match(log_msg, "(?i)(ERROR|Exception|FATAL)") OR stream_type="stderr", "ERROR",
     match(log_msg, "(?i)(WARN|Warning)"), "WARN",
     match(log_msg, "(?i)INFO"), "INFO",
-    match(log_msg, "(?i)DEBUG"), "DEBUG",
-    1=1, "OTHER"
+    match(log_msg, "(?i)DEBUG"), "DEBUG", 1=1, "OTHER"
 )
 | eval log_msg_display=if(len(log_msg)&gt;200, substr(log_msg,1,197)."...", log_msg)
 | table _time, log_level, container_display, host, log_msg_display

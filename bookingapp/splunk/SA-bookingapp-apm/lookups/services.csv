@@ -1,0 +1,10 @@
+service_name,display_name,type,tier,owner
+bookingapp-api,BookingApp API,backend,critical,platform-team
+bookingapp-web,BookingApp Web,frontend,critical,platform-team
+postgres,PostgreSQL,database,critical,platform-team
+redis,Redis Cache,cache,high,platform-team
+traefik,Traefik LB,loadbalancer,critical,infrastructure-team
+fluent-bit,Fluent Bit,logging,medium,observability-team
+node-exporter,Node Exporter,metrics,medium,observability-team
+cadvisor,cAdvisor,metrics,medium,observability-team
+
