@@ -1,0 +1,355 @@
+<form version="1.1" theme="dark">
+    <label>TRACES</label>
+    <description>Distributed Request Tracing - Timing Breakdown - Service Dependencies</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-1h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+        <input type="dropdown" token="status_filter" searchWhenChanged="true">
+            <label>STATUS</label>
+            <choice value="*">All</choice>
+            <choice value="success">Success Only</choice>
+            <choice value="error">Errors Only</choice>
+            <choice value="slow">Slow Only (&gt;100ms)</choice>
+            <default>*</default>
+        </input>
+        <input type="text" token="request_id" searchWhenChanged="true">
+            <label>REQUEST ID</label>
+            <default>*</default>
+        </input>
+    </fieldset>
+
+    <!-- ========== TRACE OVERVIEW ========== -->
+    <row>
+        <html>
+            <h2 style="color: #7C4DFF; margin: 0; padding: 10px 0;">TRACE OVERVIEW</h2>
+        </html>
+    </row>
+
+    <!-- Trace Statistics -->
+    <row>
+        <panel>
+            <title>TOTAL REQUESTS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id=*
+| stats dc(request_id) as requests</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#1a1a2e","#53A051"]</option>
+                <option name="rangeValues">[0]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>API TRACES</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="bookingapp:api:json" traceId=*
+| stats dc(traceId) as traces</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#1a1a2e","#53A051"]</option>
+                <option name="rangeValues">[0]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>ERROR REQUESTS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id=*
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=400
+| stats dc(request_id) as error_requests</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[10,50]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>AVG LATENCY</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_time=*
+| eval latency_ms=tonumber(request_time)*1000
+| stats avg(latency_ms) as avg_latency
+| eval avg_latency=round(avg_latency, 0)</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[100,500]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- Charts -->
+    <row>
+        <panel>
+            <title>LATENCY DISTRIBUTION</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_time=*
+| eval latency_ms=tonumber(request_time)*1000
+| eval bucket=case(latency_ms&lt;10, "&lt;10ms", latency_ms&lt;50, "10-50ms", latency_ms&lt;100, "50-100ms", latency_ms&lt;200, "100-200ms", latency_ms&lt;500, "200-500ms", 1=1, "&gt;500ms")
+| stats count by bucket
+| eval sort=case(bucket="&lt;10ms", 1, bucket="10-50ms", 2, bucket="50-100ms", 3, bucket="100-200ms", 4, bucket="200-500ms", 5, 1=1, 6)
+| sort sort | fields - sort</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">bar</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"count": "#7C4DFF"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>REQUEST VOLUME</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| timechart span=1m count as "Requests"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Requests": "#00D1B2"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- Request List -->
+    <row>
+        <panel>
+            <title>REQUEST LIST (Click to see flow details)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id=*
+| eval latency_ms=tonumber(request_time)*1000, status_num=tonumber(http_status)
+| eval has_error=if(status_num&gt;=400, 1, 0), is_slow=if(latency_ms&gt;100, 1, 0)
+| where ("$status_filter$"="*") OR ("$status_filter$"="error" AND has_error=1) OR ("$status_filter$"="success" AND has_error=0) OR ("$status_filter$"="slow" AND is_slow=1)
+| search request_id=*$request_id$*
+| eval time=strftime(_time, "%H:%M:%S.%3N"), latency_ms=round(latency_ms, 1), upstream_ms=round(tonumber(upstream_response_time)*1000, 1)
+| table time, request_id, method, uri, http_status, latency_ms, upstream_ms, upstream_addr, client_ip
+| sort -_time | head 50
+| rename time as "Time", request_id as "Request ID", method as "Method", uri as "Endpoint", http_status as "Status", latency_ms as "Latency", upstream_ms as "Backend", upstream_addr as "Server", client_ip as "Client"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <option name="count">15</option>
+                <format type="color" field="Status">
+                    <colorPalette type="expression">if(tonumber(value) &gt;= 500, "#DC4E41", if(tonumber(value) &gt;= 400, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+                <format type="color" field="Latency">
+                    <colorPalette type="minMidMax" minColor="#53A051" midColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+                    <scale type="minMidMax" midValue="100"></scale>
+                </format>
+                <drilldown>
+                    <set token="selected_request_id">$row.Request ID$</set>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ========== REQUEST FLOW DETAILS ========== -->
+    <row depends="$selected_request_id$">
+        <html>
+            <h2 style="color: #00D1B2; margin: 0; padding: 10px 0;">REQUEST FLOW: $selected_request_id$</h2>
+        </html>
+    </row>
+
+    <!-- Timing Breakdown -->
+    <row depends="$selected_request_id$">
+        <panel>
+            <title>TOTAL TIME</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id="$selected_request_id$"
+| eval total_ms=round(tonumber(request_time)*1000, 2) | table total_ms</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[100,500]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>NGINX</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id="$selected_request_id$"
+| eval total_ms=tonumber(request_time)*1000, backend_ms=tonumber(upstream_response_time)*1000
+| eval nginx_ms=round(total_ms - backend_ms, 2) | table nginx_ms</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[5,20]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+                <option name="underLabel">Proxy</option>
+            </single>
+        </panel>
+        <panel>
+            <title>CONNECT</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id="$selected_request_id$"
+| eval connect_ms=round(tonumber(upstream_connect_time)*1000, 2) | table connect_ms</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,5]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+                <option name="underLabel">TCP</option>
+            </single>
+        </panel>
+        <panel>
+            <title>BACKEND</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id="$selected_request_id$"
+| eval backend_ms=round(tonumber(upstream_response_time)*1000, 2) | table backend_ms</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[50,200]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+                <option name="underLabel">API</option>
+            </single>
+        </panel>
+        <panel>
+            <title>STATUS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id="$selected_request_id$" | table http_status</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[400,500]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- Request Details -->
+    <row depends="$selected_request_id$">
+        <panel>
+            <title>REQUEST DETAILS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id="$selected_request_id$"
+| eval total_ms=round(tonumber(request_time)*1000, 2), backend_ms=round(tonumber(upstream_response_time)*1000, 2), connect_ms=round(tonumber(upstream_connect_time)*1000, 2)
+| eval nginx_ms=round(total_ms - backend_ms, 2), time=strftime(_time, "%Y-%m-%d %H:%M:%S.%3N")
+| table time, request_id, method, request_uri, http_status, total_ms, nginx_ms, backend_ms, connect_ms, upstream_addr, client_ip, bytes_sent
+| rename time as "Timestamp", request_id as "Request ID", method as "Method", request_uri as "URI", http_status as "Status", total_ms as "Total (ms)", nginx_ms as "NGINX (ms)", backend_ms as "Backend (ms)", connect_ms as "Connect (ms)", upstream_addr as "Server", client_ip as "Client", bytes_sent as "Bytes"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Time Distribution -->
+    <row depends="$selected_request_id$">
+        <panel>
+            <title>TIME DISTRIBUTION</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_id="$selected_request_id$"
+| eval total_ms=tonumber(request_time)*1000, backend_ms=tonumber(upstream_response_time)*1000, connect_ms=tonumber(upstream_connect_time)*1000
+| eval nginx=round(total_ms - backend_ms, 1), backend=round(backend_ms, 1), connect=round(connect_ms, 1)
+| stats first(nginx) as "NGINX", first(connect) as "Connection", first(backend) as "Backend"
+| transpose | rename column as "Component", "row 1" as "Time (ms)"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"NGINX": "#6699CC", "Connection": "#00D1B2", "Backend": "#7C4DFF"}</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>RELATED API LOGS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="bookingapp:api:json"
+| eval time=strftime(_time, "%H:%M:%S.%3N"), context=coalesce('metadata.context', "-"), endpoint=coalesce('http.request.url', "-"), status=coalesce('http.response.statusCode', "-"), duration=coalesce('http.duration', "-")
+| table time, level, context, endpoint, status, duration, message
+| sort -_time | head 20
+| rename time as "Time", level as "Level", context as "Context", endpoint as "Endpoint", status as "Status", duration as "Duration", message as "Message"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">10</option>
+                <format type="color" field="Level">
+                    <colorPalette type="map">{"error": #DC4E41, "warn": #F8BE34, "info": #53A051, "debug": #6699CC}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- API Trace List -->
+    <row>
+        <panel>
+            <title>API TRACE LOG</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="bookingapp:api:json" traceId=*
+| eval time=strftime(_time, "%H:%M:%S.%3N"), endpoint=coalesce('http.request.url', "-"), method=coalesce('http.request.method', "-"), status=coalesce('http.response.statusCode', "-"), context=coalesce('metadata.context', "-")
+| table time, traceId, spanId, context, method, endpoint, status, level, message
+| sort -_time | head 50
+| rename time as "Time", traceId as "Trace ID", spanId as "Span ID", context as "Context", method as "Method", endpoint as "Endpoint", status as "Status", level as "Level", message as "Message"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">15</option>
+                <option name="wrap">true</option>
+                <format type="color" field="Level">
+                    <colorPalette type="map">{"error": #DC4E41, "warn": #F8BE34, "info": #53A051, "debug": #6699CC}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+</form>
+

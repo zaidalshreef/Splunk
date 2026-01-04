@@ -1,0 +1,379 @@
+<form version="1.1" theme="dark">
+    <label>ENDPOINTS &amp; ERRORS</label>
+    <description>Endpoint Performance - Error Analysis - Latency - Click endpoints to see details</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-1h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+        <input type="dropdown" token="endpoint" searchWhenChanged="true">
+            <label>ENDPOINT</label>
+            <choice value="*">All Endpoints</choice>
+            <default>*</default>
+            <fieldForLabel>uri</fieldForLabel>
+            <fieldForValue>uri</fieldForValue>
+            <search>
+                <query>index=bookingapp sourcetype="nginx:access:json" uri=* | stats count by uri | sort -count | head 50</query>
+                <earliest>-1h</earliest>
+            </search>
+        </input>
+        <input type="dropdown" token="method" searchWhenChanged="true">
+            <label>METHOD</label>
+            <choice value="*">All</choice>
+            <choice value="GET">GET</choice>
+            <choice value="POST">POST</choice>
+            <choice value="PUT">PUT</choice>
+            <choice value="DELETE">DELETE</choice>
+            <default>*</default>
+        </input>
+    </fieldset>
+
+    <!-- ========== ENDPOINT OVERVIEW ========== -->
+    <row>
+        <html>
+            <h2 style="color: #00D1B2; margin: 0; padding: 10px 0;">ENDPOINT PERFORMANCE</h2>
+        </html>
+    </row>
+
+    <row>
+        <panel>
+            <title>REQUESTS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| where (uri="$endpoint$" OR "$endpoint$"="*") AND (method="$method$" OR "$method$"="*")
+| stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#1a1a2e","#53A051"]</option>
+                <option name="rangeValues">[0]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>ERROR RATE</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where (uri="$endpoint$" OR "$endpoint$"="*") AND (method="$method$" OR "$method$"="*")
+| stats count as total, sum(eval(if(status_num&gt;=400, 1, 0))) as errors
+| eval rate=if(total&gt;0, round((errors/total)*100, 2), 0) | fields rate</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,5]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>AVG LATENCY</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_time=*
+| eval latency_ms=tonumber(request_time)*1000
+| where (uri="$endpoint$" OR "$endpoint$"="*") AND (method="$method$" OR "$method$"="*") AND latency_ms&gt;0
+| stats avg(latency_ms) as avg | eval avg=round(avg,0) | fields avg</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[200,1000]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>P99</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_time=*
+| eval latency_ms=tonumber(request_time)*1000
+| where (uri="$endpoint$" OR "$endpoint$"="*") AND (method="$method$" OR "$method$"="*") AND latency_ms&gt;0
+| stats perc99(latency_ms) as p99 | eval p99=round(p99,0) | fields p99</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[500,2000]</option>
+                <option name="unit">ms</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>HTTP 4XX</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=400 AND status_num&lt;500
+| stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[10,100]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>HTTP 5XX</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=500
+| stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,10]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- Charts -->
+    <row>
+        <panel>
+            <title>REQUESTS OVER TIME</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| where (uri="$endpoint$" OR "$endpoint$"="*") AND (method="$method$" OR "$method$"="*")
+| timechart span=1m count as "Requests"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Requests": "#00D1B2"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>LATENCY BREAKDOWN</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" request_time=* upstream_response_time!="-"
+| eval total_ms=tonumber(request_time)*1000, upstream_ms=tonumber(upstream_response_time)*1000
+| eval nginx_ms=total_ms - upstream_ms
+| where (uri="$endpoint$" OR "$endpoint$"="*") AND (method="$method$" OR "$method$"="*")
+| timechart span=1m avg(nginx_ms) as "NGINX", avg(upstream_ms) as "Backend"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"NGINX": "#6699CC", "Backend": "#7C4DFF"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>ERROR TREND</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=400
+| eval error_type=if(status_num&lt;500, "4xx", "5xx")
+| timechart span=5m count by error_type</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"4xx": "#F8BE34", "5xx": "#DC4E41"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- Endpoint Table -->
+    <row>
+        <panel>
+            <title>ENDPOINT BREAKDOWN (Click to see details)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" uri=*
+| eval latency_ms=tonumber(request_time)*1000, status_num=tonumber(http_status), upstream_ms=tonumber(upstream_response_time)*1000
+| where (uri="$endpoint$" OR "$endpoint$"="*") AND (method="$method$" OR "$method$"="*")
+| stats count as requests, avg(latency_ms) as avg_ms, avg(upstream_ms) as backend_ms, perc95(latency_ms) as p95_ms, perc99(latency_ms) as p99_ms, sum(eval(if(status_num&gt;=400, 1, 0))) as errors by method, uri
+| eval error_rate=round((errors/requests)*100, 2)."%"
+| eval avg_ms=round(avg_ms,0), backend_ms=round(backend_ms,0), p95_ms=round(p95_ms,0), p99_ms=round(p99_ms,0)
+| sort -requests
+| rename method as "Method", uri as "Endpoint", requests as "Reqs", avg_ms as "Avg (ms)", backend_ms as "Backend", p95_ms as "P95", p99_ms as "P99", error_rate as "Error %"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <option name="count">15</option>
+                <format type="color" field="Error %">
+                    <colorPalette type="expression">if(tonumber(replace(value, "%", "")) > 5, "#DC4E41", if(tonumber(replace(value, "%", "")) > 1, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+                <format type="color" field="P99">
+                    <colorPalette type="minMidMax" minColor="#53A051" midColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+                    <scale type="minMidMax" midValue="500"></scale>
+                </format>
+                <drilldown>
+                    <set token="selected_endpoint">$row.Endpoint$</set>
+                    <set token="selected_method">$row.Method$</set>
+                </drilldown>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Endpoint Details (shown when clicked) -->
+    <row depends="$selected_endpoint$">
+        <html>
+            <h2 style="color: #7C4DFF; margin: 0; padding: 10px 0;">REQUESTS: $selected_method$ $selected_endpoint$</h2>
+        </html>
+    </row>
+
+    <row depends="$selected_endpoint$">
+        <panel>
+            <title>REQUEST LIST</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" uri="$selected_endpoint$" method="$selected_method$"
+| eval total_ms=round(tonumber(request_time)*1000, 1), backend_ms=round(tonumber(upstream_response_time)*1000, 1), nginx_ms=round(total_ms - backend_ms, 1)
+| eval time=strftime(_time, "%H:%M:%S.%3N")
+| table time, request_id, http_status, total_ms, nginx_ms, backend_ms, upstream_addr, client_ip
+| sort -_time | head 50
+| rename time as "Time", request_id as "Request ID", http_status as "Status", total_ms as "Total", nginx_ms as "NGINX", backend_ms as "Backend", upstream_addr as "Server", client_ip as "Client"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">row</option>
+                <option name="count">15</option>
+                <format type="color" field="Status">
+                    <colorPalette type="expression">if(tonumber(value) >= 500, "#DC4E41", if(tonumber(value) >= 400, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+                <format type="color" field="Total">
+                    <colorPalette type="minMidMax" minColor="#53A051" midColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+                    <scale type="minMidMax" midValue="100"></scale>
+                </format>
+                <drilldown>
+                    <link target="_blank">06-traces?form.request_id=$row.Request ID$</link>
+                </drilldown>
+            </table>
+        </panel>
+        <panel>
+            <title>BACKEND PERFORMANCE</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" uri="$selected_endpoint$" method="$selected_method$" upstream_addr!="-"
+| eval backend_ms=tonumber(upstream_response_time)*1000
+| stats count as requests, avg(backend_ms) as avg_ms, perc99(backend_ms) as p99_ms by upstream_addr
+| eval avg_ms=round(avg_ms, 1), p99_ms=round(p99_ms, 1)
+| sort -requests
+| rename upstream_addr as "Backend", requests as "Requests", avg_ms as "Avg (ms)", p99_ms as "P99 (ms)"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ========== ERROR TRACKING ========== -->
+    <row>
+        <html>
+            <h2 style="color: #DC4E41; margin: 0; padding: 10px 0;">ERROR TRACKING</h2>
+        </html>
+    </row>
+
+    <row>
+        <panel>
+            <title>TOP ERROR MESSAGES (API)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| eval error_msg=substr(message, 1, 80)
+| stats count, dc(traceId) as traces, latest(_time) as last_seen by level, error_msg
+| eval last_seen=strftime(last_seen, "%H:%M:%S")
+| sort -count | head 15
+| rename level as "Level", error_msg as "Message", count as "Count", traces as "Traces", last_seen as "Last Seen"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">10</option>
+                <format type="color" field="Level">
+                    <colorPalette type="map">{"error": #DC4E41, "fatal": #B83C32, "warn": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>HTTP ERROR ENDPOINTS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| eval status_num=tonumber(http_status)
+| where status_num&gt;=400
+| stats count as errors by method, uri, http_status
+| sort -errors | head 15
+| rename method as "Method", uri as "Endpoint", http_status as "Status", errors as "Errors"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">10</option>
+                <format type="color" field="Errors">
+                    <colorPalette type="minMidMax" minColor="#F8BE34" maxColor="#DC4E41"></colorPalette>
+                </format>
+                <format type="color" field="Status">
+                    <colorPalette type="expression">if(tonumber(value) >= 500, "#DC4E41", "#F8BE34")</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <row>
+        <panel>
+            <title>RECENT ERRORS (with Stack Traces)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="bookingapp:api:json" (level=error OR level=fatal OR level=warn)
+| eval time=strftime(_time, "%H:%M:%S")
+| eval service=coalesce('metadata.service', "unknown")
+| eval error_name=coalesce('error.name', level)
+| eval error_msg=coalesce(message, "-")
+| eval endpoint=coalesce('http.request.url', "-")
+| eval trace=coalesce(traceId, "-")
+| eval stack=coalesce('error.stack', "-")
+| table time, level, service, error_msg, endpoint, trace, stack
+| sort -_time | head 50
+| rename time as "Time", level as "Level", service as "Service", error_msg as "Message", endpoint as "Endpoint", trace as "Trace", stack as "Stack"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">10</option>
+                <format type="color" field="Level">
+                    <colorPalette type="map">{"error": #DC4E41, "fatal": #B83C32, "warn": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+</form>
+

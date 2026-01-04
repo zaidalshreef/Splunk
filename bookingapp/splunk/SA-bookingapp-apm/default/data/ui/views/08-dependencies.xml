@@ -1,0 +1,349 @@
+<form version="1.1" theme="dark">
+    <label>DEPENDENCIES</label>
+    <description>PostgreSQL Database - Redis Cache - Connection Monitoring - Performance Analysis</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-1h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+    </fieldset>
+
+    <!-- ========== DATABASE (PostgreSQL) ========== -->
+    <row>
+        <html>
+            <h2 style="color: #336791; margin: 0; padding: 10px 0;">POSTGRESQL DATABASE</h2>
+        </html>
+    </row>
+
+    <row>
+        <panel>
+            <title>DB EVENTS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>CONNECTIONS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" "connection received" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>AUTHORIZED</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" "connection authorized" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>DISCONNECTS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" "disconnection" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>DB ERRORS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" (ERROR OR FATAL) | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,10]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <row>
+        <panel>
+            <title>DATABASE ACTIVITY</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log"
+| eval event_type=case(match(_raw, "connection received"), "Connect", match(_raw, "connection authorized"), "Auth", match(_raw, "disconnection"), "Disconnect", match(_raw, "ERROR|FATAL"), "Error", 1=1, "Other")
+| timechart span=1m count by event_type</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Connect": "#53A051", "Auth": "#00D1B2", "Disconnect": "#F8BE34", "Error": "#DC4E41", "Other": "#6699CC"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>CONNECTIONS BY USER</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" "connection authorized"
+| rex "user=(?&lt;db_user&gt;[^,]+)" | stats count by db_user | sort -count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>CONNECTIONS BY DB</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" "connection authorized"
+| rex "database=(?&lt;db_name&gt;\w+)" | stats count by db_name | sort -count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">bar</option>
+                <option name="charting.drilldown">none</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+    </row>
+
+    <row>
+        <panel>
+            <title>DATABASE CONNECTION LOG</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log"
+| rex "user=(?&lt;db_user&gt;[^,]+)" | rex "db=(?&lt;db_name&gt;[^,]+)" | rex "app=(?&lt;app_name&gt;[^,]+)"
+| eval time=strftime(_time, "%H:%M:%S")
+| eval event=case(match(_raw, "connection received"), "CONNECT", match(_raw, "connection authorized"), "AUTH", match(_raw, "disconnection"), "DISCONNECT", match(_raw, "ERROR"), "ERROR", match(_raw, "FATAL"), "FATAL", 1=1, "OTHER")
+| table time, event, db_user, db_name, app_name | sort -_time | head 50
+| rename time as "Time", event as "Event", db_user as "User", db_name as "Database", app_name as "Application"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">12</option>
+                <format type="color" field="Event">
+                    <colorPalette type="map">{"CONNECT": #53A051, "AUTH": #6699CC, "DISCONNECT": #F8BE34, "ERROR": #DC4E41, "FATAL": #B83C32, "OTHER": #999999}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>DATABASE ERRORS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="postgresql:log" (ERROR OR FATAL OR WARNING)
+| rex "user=(?&lt;db_user&gt;[^,]+)"
+| eval severity=case(match(_raw, "ERROR"), "ERROR", match(_raw, "FATAL"), "FATAL", match(_raw, "WARNING"), "WARNING", 1=1, "UNKNOWN")
+| eval time=strftime(_time, "%H:%M:%S")
+| rex "(?:ERROR|FATAL|WARNING):\s+(?&lt;error_msg&gt;.+)$"
+| table time, severity, db_user, error_msg | sort -_time | head 20
+| rename time as "Time", severity as "Severity", db_user as "User", error_msg as "Message"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">12</option>
+                <format type="color" field="Severity">
+                    <colorPalette type="map">{"ERROR": #DC4E41, "FATAL": #B83C32, "WARNING": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- ========== CACHE (Redis) ========== -->
+    <row>
+        <html>
+            <h2 style="color: #DC382D; margin: 0; padding: 10px 0;">REDIS CACHE</h2>
+        </html>
+    </row>
+
+    <row>
+        <panel>
+            <title>CACHE EVENTS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>CONNECTIONS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" "Accepted" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>DISCONNECTIONS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" "Client closed connection" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>KEYS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" "DB 0:" | rex "(?&lt;key_count&gt;\d+) keys" | stats latest(key_count) as keys</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>WARNINGS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" "#" | stats count</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[1,10]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <row>
+        <panel>
+            <title>REDIS ACTIVITY</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log"
+| eval event_type=case(match(_raw, "Accepted"), "Connection", match(_raw, "Client closed"), "Disconnect", match(_raw, "DB \\d+:"), "DB Status", 1=1, "Other")
+| timechart span=1m count by event_type</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">column</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Connection": "#53A051", "Disconnect": "#F8BE34", "DB Status": "#00D1B2", "Other": "#6699CC"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>KEYS OVER TIME</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" "DB 0:"
+| rex "(?&lt;key_count&gt;\d+) keys" | rex "\((?&lt;volatile_count&gt;\d+) volatile\)"
+| timechart span=1m latest(key_count) as "Total Keys", latest(volatile_count) as "Volatile"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Total Keys": "#00D1B2", "Volatile": "#FF6384"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>COMMANDS</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" "cmd="
+| rex "cmd=(?&lt;redis_cmd&gt;\w+)" | stats count by redis_cmd | sort -count | head 10</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">pie</option>
+                <option name="charting.drilldown">none</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+    </row>
+
+    <row>
+        <panel>
+            <title>REDIS CLIENT CONNECTIONS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" ("Accepted" OR "Client closed")
+| rex "Accepted (?&lt;client_addr&gt;[\d\.:]+)" | rex "addr=(?&lt;client_addr2&gt;[\d\.:]+)" | rex "id=(?&lt;conn_id&gt;\d+)" | rex "cmd=(?&lt;last_cmd&gt;\w+)"
+| eval client_ip=coalesce(client_addr, client_addr2), event=if(match(_raw, "Accepted"), "CONNECT", "DISCONNECT"), time=strftime(_time, "%H:%M:%S")
+| table time, event, client_ip, conn_id, last_cmd | sort -_time | head 50
+| rename time as "Time", event as "Event", client_ip as "Client", conn_id as "Conn ID", last_cmd as "Last Cmd"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">12</option>
+                <format type="color" field="Event">
+                    <colorPalette type="map">{"CONNECT": #53A051, "DISCONNECT": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>REDIS WARNINGS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="redis:log" "#"
+| rex "\d{2}:\d{2}:\d{2}\.\d+ # (?&lt;warning_msg&gt;.+)$"
+| eval time=strftime(_time, "%H:%M:%S")
+| table time, warning_msg | sort -_time | head 20
+| rename time as "Time", warning_msg as "Warning"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">12</option>
+            </table>
+        </panel>
+    </row>
+</form>
+

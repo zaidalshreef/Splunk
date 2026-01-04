@@ -101,18 +101,18 @@
             </single>
         </panel>
         <panel>
-            <title>CONTAINERS STOPPED</title>
+            <title>HEALTHY CONTAINERS</title>
             <single>
                 <search>
-                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" running=0
-| stats dc(container) as stopped_containers</query>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" running=1 (health="running" OR health="healthy")
+| stats dc(container) as healthy_containers</query>
                     <earliest>-5m</earliest>
                     <latest>now</latest>
                 </search>
                 <option name="colorMode">block</option>
                 <option name="drilldown">none</option>
-                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
-                <option name="rangeValues">[0,5]</option>
+                <option name="rangeColors">["#DC4E41","#F8BE34","#53A051"]</option>
+                <option name="rangeValues">[3,8]</option>
                 <option name="useColors">1</option>
             </single>
         </panel>
@@ -158,30 +158,25 @@
     <!-- BookingApp Core Services Status -->
     <row>
         <panel>
-            <title>BOOKINGAPP CORE SERVICES STATUS</title>
+            <title>BOOKINGAPP CORE SERVICES STATUS (RUNNING)</title>
             <table>
                 <search>
                     <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
 | search container="*bookingapp*" OR container="*nginx*" OR container="*redis*" OR container="*postgres*" OR container="*api*" OR container="*web*"
 | stats latest(running) as is_running, latest(status) as status, latest(health) as health by container
+| where is_running=1
 | eval service_type = case(
     match(container, "api"), "API",
     match(container, "web"), "Frontend",
     match(container, "nginx"), "Load Balancer",
     match(container, "redis"), "Cache",
-    match(container, "postgres"), "Database",
-    1=1, "Other"
+    match(container, "postgres"), "Database", 1=1, "Other"
 )
-| eval status_icon = if(is_running=1, "UP", "DOWN")
-| eval health_status = case(
-    health="running" OR health="healthy", "Healthy",
-    health="unhealthy", "Unhealthy",
-    health="stopped" OR health="exited", "Stopped",
-    1=1, "Unknown"
+| eval health_status = case( health="running" OR health="healthy", "Healthy", health="unhealthy", "Unhealthy", 1=1, "Unknown"
 )
-| table container, service_type, status_icon, health_status, status
+| table container, service_type, health_status, status
 | sort service_type
-| rename container as "Container", service_type as "Service Type", status_icon as "Status", health_status as "Health", status as "Details"</query>
+| rename container as "Container", service_type as "Service Type", health_status as "Health", status as "Uptime"</query>
                     <earliest>-5m</earliest>
                     <latest>now</latest>
                 </search>
@@ -255,8 +250,7 @@
     match(container, "web"), "Frontend",
     match(container, "nginx"), "NGINX",
     match(container, "redis"), "Redis",
-    match(container, "postgres"), "PostgreSQL",
-    1=1, container
+    match(container, "postgres"), "PostgreSQL", 1=1, container
 )
 | timechart span=5m sum(running) as running_count by service</query>
                     <earliest>$time.earliest$</earliest>
@@ -275,26 +269,23 @@
     <!-- All Containers Status -->
     <row>
         <panel>
-            <title>ALL CONTAINERS STATUS</title>
+            <title>ALL RUNNING CONTAINERS</title>
             <table>
                 <search>
                     <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
 | stats latest(running) as is_running, latest(status) as status, latest(health) as health, latest(image) as image by container
-| eval state = if(is_running=1, "Running", "Stopped")
-| sort -is_running, container
-| table container, state, health, status, image
-| rename container as "Container", state as "State", health as "Health", status as "Status Details", image as "Image"</query>
+| where is_running=1
+| sort container
+| table container, health, status, image
+| rename container as "Container", health as "Health", status as "Uptime", image as "Image"</query>
                     <earliest>-5m</earliest>
                     <latest>now</latest>
                 </search>
                 <option name="drilldown">none</option>
                 <option name="wrap">true</option>
                 <option name="count">20</option>
-                <format type="color" field="State">
-                    <colorPalette type="map">{"Running": #53A051, "Stopped": #DC4E41}</colorPalette>
-                </format>
                 <format type="color" field="Health">
-                    <colorPalette type="map">{"running": #53A051, "healthy": #53A051, "unhealthy": #DC4E41, "stopped": #F8BE34, "exited": #F8BE34}</colorPalette>
+                    <colorPalette type="map">{"running": #53A051, "healthy": #53A051, "unhealthy": #DC4E41}</colorPalette>
                 </format>
             </table>
         </panel>
@@ -307,22 +298,21 @@
             <table>
                 <search>
                     <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
-| search container="*bookingapp*" OR container="*nginx*" OR container="*redis*" OR container="*postgres*" OR container="*api*" OR container="*web*"
+| search (container="*api*" OR container="*nginx*" OR container="*redis*" OR container="*postgres*" OR container="*web*") NOT container="*migrate*" NOT container="*monitor*"
 | eval service = case(
-    match(container, "api"), "API",
+    match(container, "api-"), "API",
     match(container, "web"), "Frontend",
     match(container, "nginx"), "NGINX",
     match(container, "redis"), "Redis",
-    match(container, "postgres"), "PostgreSQL",
-    1=1, "Other"
+    match(container, "postgres"), "PostgreSQL", 1=1, "Other"
 )
+| where service!="Other"
 | stats count as total_checks, sum(running) as up_checks by service
 | eval availability_pct = round((up_checks/total_checks)*100, 2)
 | eval sla_status = case(
     availability_pct >= 99.9, "Excellent",
     availability_pct >= 99, "Good",
-    availability_pct >= 95, "Acceptable",
-    1=1, "Critical"
+    availability_pct >= 95, "Acceptable", 1=1, "Critical"
 )
 | table service, total_checks, up_checks, availability_pct, sla_status
 | sort -availability_pct

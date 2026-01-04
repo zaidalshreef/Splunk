@@ -1,0 +1,374 @@
+<form version="1.1" theme="dark">
+    <label>INFRASTRUCTURE</label>
+    <description>Host System Metrics - Docker Container Resources - Combined View</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-1h</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+        <input type="dropdown" token="container" searchWhenChanged="true">
+            <label>CONTAINER</label>
+            <choice value="*">All Containers</choice>
+            <default>*</default>
+            <fieldForLabel>container</fieldForLabel>
+            <fieldForValue>container</fieldForValue>
+            <search>
+                <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker" | stats count by container | sort -count</query>
+                <earliest>-1h</earliest>
+            </search>
+        </input>
+    </fieldset>
+
+    <!-- ========== HOST METRICS ========== -->
+    <row>
+        <html>
+            <h2 style="color: #7C4DFF; margin: 0; padding: 10px 0;">HOST SYSTEM</h2>
+        </html>
+    </row>
+
+    <row>
+        <panel>
+            <title>HOST CPU</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="cpu_metrics" metric_type="cpu"
+| stats latest(cpu_percent) as cpu
+| eval cpu=round(cpu, 1)</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[70,90]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>HOST MEMORY</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="memory_metrics" metric_type="memory"
+| stats latest(mem_percent) as mem
+| eval mem=round(mem, 1)</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[70,90]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>DISK USAGE (/)</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="disk_metrics" metric_type="disk" mount="/"
+| stats latest(use_percent) as disk
+| eval disk=round(disk, 1)</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[70,90]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>LOAD AVG (1m)</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="cpu_metrics" metric_type="cpu"
+| stats latest(load_1) as load
+| eval load=round(load, 2)</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[4,8]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>RUNNING</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" running=1
+| stats dc(container) as containers</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#DC4E41","#53A051"]</option>
+                <option name="rangeValues">[1]</option>
+                <option name="underLabel">CONTAINERS</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>DOCKER CPU</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker"
+| stats sum(cpu_percent) as total_cpu
+| eval total_cpu=round(total_cpu, 1)</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[50,80]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- Host CPU/Memory Charts -->
+    <row>
+        <panel>
+            <title>HOST CPU OVER TIME</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="cpu_metrics" metric_type="cpu"
+| timechart span=1m avg(cpu_percent) as "CPU %"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"CPU %": "#7C4DFF"}</option>
+                <option name="charting.axisTitleY.text">%</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>HOST MEMORY OVER TIME</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="memory_metrics" metric_type="memory"
+| timechart span=1m avg(mem_percent) as "Memory %"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"Memory %": "#00D1B2"}</option>
+                <option name="charting.axisTitleY.text">%</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>LOAD AVERAGE</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="cpu_metrics" metric_type="cpu"
+| timechart span=1m avg(load_1) as "1 min", avg(load_5) as "5 min", avg(load_15) as "15 min"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"1 min": "#DC4E41", "5 min": "#F8BE34", "15 min": "#53A051"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- ========== CONTAINER METRICS ========== -->
+    <row>
+        <html>
+            <h2 style="color: #00D1B2; margin: 0; padding: 10px 0;">DOCKER CONTAINERS</h2>
+        </html>
+    </row>
+
+    <!-- Container CPU/Memory Charts -->
+    <row>
+        <panel>
+            <title>CONTAINER CPU USAGE</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker"
+| where container="$container$" OR "$container$"="*"
+| timechart span=1m avg(cpu_percent) by container limit=10</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.legend.placement">bottom</option>
+                <option name="charting.axisTitleY.text">CPU %</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>CONTAINER MEMORY USAGE</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker"
+| where container="$container$" OR "$container$"="*"
+| timechart span=1m avg(mem_percent) by container limit=10</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.chart.nullValueMode">zero</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.legend.placement">bottom</option>
+                <option name="charting.axisTitleY.text">Memory %</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- Container Resource Table -->
+    <row>
+        <panel>
+            <title>CONTAINER RESOURCES</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker"
+| where container="$container$" OR "$container$"="*"
+| stats latest(cpu_percent) as cpu, latest(mem_percent) as mem, latest(mem_used) as mem_used, latest(pids) as pids by container
+| eval cpu=round(cpu, 2)
+| eval mem=round(mem, 2)
+| sort -cpu
+| rename container as "Container", cpu as "CPU %", mem as "Mem %", mem_used as "Memory Used", pids as "PIDs"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">15</option>
+                <format type="color" field="CPU %">
+                    <colorPalette type="expression">if(value > 50, "#DC4E41", if(value > 20, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+                <format type="color" field="Mem %">
+                    <colorPalette type="expression">if(value > 80, "#DC4E41", if(value > 50, "#F8BE34", "#53A051"))</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>CONTAINER STATUS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
+| where container="$container$" OR "$container$"="*"
+| stats latest(status) as status, latest(health) as health, latest(running) as running by container
+| where running=1
+| sort container
+| table container, health, status
+| rename container as "Container", health as "Health", status as "Uptime"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="count">15</option>
+                <format type="color" field="Health">
+                    <colorPalette type="map">{"running": #53A051, "healthy": #53A051, "unhealthy": #DC4E41}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Disk and Network -->
+    <row>
+        <panel>
+            <title>DISK BY MOUNT</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="disk_metrics" metric_type="disk"
+| stats latest(use_percent) as usage by mount
+| sort -usage</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">bar</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.axisTitleY.text">Usage %</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>NETWORK BY INTERFACE</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="network_metrics" metric_type="network" interface!="lo"
+| stats latest(rx_mb) as rx_mb, latest(tx_mb) as tx_mb by interface
+| eval total=rx_mb+tx_mb
+| sort -total
+| head 5</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">bar</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.fieldColors">{"rx_mb": "#6699CC", "tx_mb": "#FF6384"}</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+        <panel>
+            <title>TOP PROCESSES (CPU)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="ps_metrics" metric_type="process"
+| stats latest(cpu_percent) as cpu, latest(mem_percent) as mem by command
+| sort -cpu
+| head 8
+| rename command as "Process", cpu as "CPU %", mem as "Mem %"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Container I/O -->
+    <row>
+        <panel>
+            <title>CONTAINER NETWORK I/O</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker"
+| where container="$container$" OR "$container$"="*"
+| stats latest(net_in) as net_in, latest(net_out) as net_out by container
+| sort container
+| rename container as "Container", net_in as "Net In", net_out as "Net Out"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+        <panel>
+            <title>CONTAINER BLOCK I/O</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker"
+| where container="$container$" OR "$container$"="*"
+| stats latest(block_in) as block_in, latest(block_out) as block_out by container
+| sort container
+| rename container as "Container", block_in as "Block Read", block_out as "Block Write"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+            </table>
+        </panel>
+    </row>
+</form>
+
