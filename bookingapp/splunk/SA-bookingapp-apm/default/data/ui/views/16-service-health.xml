@@ -1,0 +1,443 @@
+<form version="1.1" theme="dark">
+    <label>SERVICE HEALTH &amp; AVAILABILITY</label>
+    <description>System Uptime - Service Heartbeat - Container Status - Load Balancer Health</description>
+
+    <fieldset submitButton="false" autoRun="true">
+        <input type="time" token="time" searchWhenChanged="true">
+            <label>TIME RANGE</label>
+            <default>
+                <earliest>-15m</earliest>
+                <latest>now</latest>
+            </default>
+        </input>
+    </fieldset>
+
+    <!-- VM Uptime & System Info -->
+    <row>
+        <panel>
+            <title>VM UPTIME</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="uptime_metrics" metric_type="system_info"
+| stats latest(uptime_days) as days
+| eval uptime = days . " days"
+| fields uptime</query>
+                    <earliest>-15m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#DC4E41","#F8BE34","#53A051"]</option>
+                <option name="rangeValues">[1,7]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>BOOT TIME</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="uptime_metrics" metric_type="system_info"
+| stats latest(boot_time) as boot_time
+| fields boot_time</query>
+                    <earliest>-15m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>OS VERSION</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="uptime_metrics" metric_type="system_info"
+| stats latest(os) as os
+| fields os</query>
+                    <earliest>-15m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>KERNEL</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="uptime_metrics" metric_type="system_info"
+| stats latest(kernel) as kernel
+| fields kernel</query>
+                    <earliest>-15m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- Service Health Summary -->
+    <row>
+        <panel>
+            <title>CONTAINERS RUNNING</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" running=1
+| stats dc(container) as running_containers</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#DC4E41","#53A051"]</option>
+                <option name="rangeValues">[5]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>CONTAINERS STOPPED</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" running=0
+| stats dc(container) as stopped_containers</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#53A051","#F8BE34","#DC4E41"]</option>
+                <option name="rangeValues">[0,5]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>API HEALTH (2xx Rate)</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" uri="/api/v1/health"
+| stats count as total, sum(eval(if(tonumber(http_status)&lt;300,1,0))) as success
+| eval health_pct = if(total>0, round((success/total)*100, 1), 0)
+| fields health_pct</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="rangeColors">["#DC4E41","#F8BE34","#53A051"]</option>
+                <option name="rangeValues">[90,99]</option>
+                <option name="unit">%</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>NGINX AVAILABILITY</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| stats count as total
+| eval availability = if(total>0, "ONLINE", "OFFLINE")
+| fields availability</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="colorBy">value</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+    <!-- BookingApp Core Services Status -->
+    <row>
+        <panel>
+            <title>BOOKINGAPP CORE SERVICES STATUS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
+| search container="*bookingapp*" OR container="*nginx*" OR container="*redis*" OR container="*postgres*" OR container="*api*" OR container="*web*"
+| stats latest(running) as is_running, latest(status) as status, latest(health) as health by container
+| eval service_type = case(
+    match(container, "api"), "API",
+    match(container, "web"), "Frontend",
+    match(container, "nginx"), "Load Balancer",
+    match(container, "redis"), "Cache",
+    match(container, "postgres"), "Database",
+    1=1, "Other"
+)
+| eval status_icon = if(is_running=1, "UP", "DOWN")
+| eval health_status = case(
+    health="running" OR health="healthy", "Healthy",
+    health="unhealthy", "Unhealthy",
+    health="stopped" OR health="exited", "Stopped",
+    1=1, "Unknown"
+)
+| table container, service_type, status_icon, health_status, status
+| sort service_type
+| rename container as "Container", service_type as "Service Type", status_icon as "Status", health_status as "Health", status as "Details"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <format type="color" field="Status">
+                    <colorPalette type="map">{"UP": #53A051, "DOWN": #DC4E41}</colorPalette>
+                </format>
+                <format type="color" field="Health">
+                    <colorPalette type="map">{"Healthy": #53A051, "Unhealthy": #DC4E41, "Stopped": #F8BE34, "Unknown": #6699CC}</colorPalette>
+                </format>
+                <format type="color" field="Service Type">
+                    <colorPalette type="map">{"API": #53A051, "Frontend": #6699CC, "Load Balancer": #F8BE34, "Cache": #DC4E41, "Database": #9C27B0}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Load Balancer Backend Health -->
+    <row>
+        <panel>
+            <title>API BACKENDS (BEHIND NGINX)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" container="*api*"
+| stats latest(running) as is_running, latest(status) as status, latest(health) as health by container
+| eval backend_status = if(is_running=1, "READY", "NOT READY")
+| eval icon = if(is_running=1, "OK", "FAIL")
+| table container, backend_status, health, status
+| rename container as "Backend Instance", backend_status as "Ready", health as "Health", status as "Status"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Ready">
+                    <colorPalette type="map">{"READY": #53A051, "NOT READY": #DC4E41}</colorPalette>
+                </format>
+                <format type="color" field="Health">
+                    <colorPalette type="map">{"running": #53A051, "healthy": #53A051, "unhealthy": #DC4E41, "stopped": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>API RESPONSE RATE BY BACKEND</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json" uri="/api/*"
+| eval upstream = coalesce(upstream_addr, "direct")
+| timechart span=1m count by upstream</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">line</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.legend.placement">bottom</option>
+                <option name="height">200</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- Service Heartbeat Timeline -->
+    <row>
+        <panel>
+            <title>SERVICE HEARTBEAT (CONTAINER STATUS OVER TIME)</title>
+            <chart>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
+| search container="*bookingapp*" OR container="*nginx*" OR container="*redis*" OR container="*postgres*" OR container="*api*" OR container="*web*"
+| eval service = case(
+    match(container, "api"), "API",
+    match(container, "web"), "Frontend",
+    match(container, "nginx"), "NGINX",
+    match(container, "redis"), "Redis",
+    match(container, "postgres"), "PostgreSQL",
+    1=1, container
+)
+| timechart span=5m sum(running) as running_count by service</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="charting.chart">area</option>
+                <option name="charting.chart.stackMode">stacked</option>
+                <option name="charting.drilldown">none</option>
+                <option name="charting.legend.placement">bottom</option>
+                <option name="charting.fieldColors">{"API": #53A051, "Frontend": #6699CC, "NGINX": #F8BE34, "Redis": #DC4E41, "PostgreSQL": #9C27B0}</option>
+                <option name="height">250</option>
+            </chart>
+        </panel>
+    </row>
+
+    <!-- All Containers Status -->
+    <row>
+        <panel>
+            <title>ALL CONTAINERS STATUS</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
+| stats latest(running) as is_running, latest(status) as status, latest(health) as health, latest(image) as image by container
+| eval state = if(is_running=1, "Running", "Stopped")
+| sort -is_running, container
+| table container, state, health, status, image
+| rename container as "Container", state as "State", health as "Health", status as "Status Details", image as "Image"</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <option name="wrap">true</option>
+                <option name="count">20</option>
+                <format type="color" field="State">
+                    <colorPalette type="map">{"Running": #53A051, "Stopped": #DC4E41}</colorPalette>
+                </format>
+                <format type="color" field="Health">
+                    <colorPalette type="map">{"running": #53A051, "healthy": #53A051, "unhealthy": #DC4E41, "stopped": #F8BE34, "exited": #F8BE34}</colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Availability Metrics -->
+    <row>
+        <panel>
+            <title>SERVICE AVAILABILITY (UPTIME %)</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status"
+| search container="*bookingapp*" OR container="*nginx*" OR container="*redis*" OR container="*postgres*" OR container="*api*" OR container="*web*"
+| eval service = case(
+    match(container, "api"), "API",
+    match(container, "web"), "Frontend",
+    match(container, "nginx"), "NGINX",
+    match(container, "redis"), "Redis",
+    match(container, "postgres"), "PostgreSQL",
+    1=1, "Other"
+)
+| stats count as total_checks, sum(running) as up_checks by service
+| eval availability_pct = round((up_checks/total_checks)*100, 2)
+| eval sla_status = case(
+    availability_pct >= 99.9, "Excellent",
+    availability_pct >= 99, "Good",
+    availability_pct >= 95, "Acceptable",
+    1=1, "Critical"
+)
+| table service, total_checks, up_checks, availability_pct, sla_status
+| sort -availability_pct
+| rename service as "Service", total_checks as "Total Checks", up_checks as "Up Checks", availability_pct as "Availability %", sla_status as "SLA Status"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="SLA Status">
+                    <colorPalette type="map">{"Excellent": #53A051, "Good": #6699CC, "Acceptable": #F8BE34, "Critical": #DC4E41}</colorPalette>
+                </format>
+                <format type="number" field="Availability %">
+                    <option name="unit">%</option>
+                </format>
+            </table>
+        </panel>
+        <panel>
+            <title>HTTP SUCCESS RATE BY ENDPOINT</title>
+            <table>
+                <search>
+                    <query>index=bookingapp sourcetype="nginx:access:json"
+| rex field=uri "^(?&lt;endpoint&gt;/api/v1/[^/?]+)"
+| stats count as total, sum(eval(if(tonumber(http_status)&lt;400,1,0))) as success by endpoint
+| eval success_rate = round((success/total)*100, 1)
+| where total > 5
+| sort -total
+| head 15
+| table endpoint, total, success, success_rate
+| rename endpoint as "Endpoint", total as "Requests", success as "Success", success_rate as "Success Rate %"</query>
+                    <earliest>$time.earliest$</earliest>
+                    <latest>$time.latest$</latest>
+                </search>
+                <option name="drilldown">none</option>
+                <format type="color" field="Success Rate %">
+                    <colorPalette type="minMidMax" maxColor="#53A051" midColor="#F8BE34" minColor="#DC4E41"></colorPalette>
+                </format>
+            </table>
+        </panel>
+    </row>
+
+    <!-- Database & Cache Health -->
+    <row>
+        <panel>
+            <title>POSTGRESQL STATUS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" container="*postgres*"
+| stats latest(running) as is_running
+| eval status = if(is_running=1, "ONLINE", "OFFLINE")
+| fields status</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="colorBy">value</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>REDIS STATUS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" container="*redis*"
+| stats latest(running) as is_running
+| eval status = if(is_running=1, "ONLINE", "OFFLINE")
+| fields status</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="colorBy">value</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>NGINX STATUS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" container="*nginx*"
+| stats latest(running) as is_running
+| eval status = if(is_running=1, "ONLINE", "OFFLINE")
+| fields status</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="colorBy">value</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+        <panel>
+            <title>API STATUS</title>
+            <single>
+                <search>
+                    <query>index=bookingapp sourcetype="docker_metrics" metric_type="docker_status" container="*api*"
+| stats sum(running) as running_apis
+| eval status = if(running_apis>0, running_apis." ONLINE", "ALL OFFLINE")
+| fields status</query>
+                    <earliest>-5m</earliest>
+                    <latest>now</latest>
+                </search>
+                <option name="colorMode">block</option>
+                <option name="drilldown">none</option>
+                <option name="colorBy">value</option>
+                <option name="rangeColors">["#53A051"]</option>
+                <option name="useColors">1</option>
+            </single>
+        </panel>
+    </row>
+
+</form>
+
